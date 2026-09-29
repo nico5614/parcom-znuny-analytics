@@ -5,12 +5,12 @@ from logging.handlers import RotatingFileHandler
 import sys
 
 from PySide6.QtCore import QLocale, QLockFile
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from . import APP_NAME, VERSION
 from .storage import LocalStore, default_storage_path
-from .ui import MainWindow
+from .ui import APP_LOGO, MainWindow
 
 
 def main() -> int:
@@ -18,6 +18,7 @@ def main() -> int:
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(VERSION)
     app.setOrganizationName("ParCom")
+    app.setWindowIcon(QIcon(str(APP_LOGO)))
     app.setStyle("Fusion")
     app.setFont(QFont("Segoe UI", 10))
     QLocale.setDefault(QLocale(QLocale.Language.German, QLocale.Country.Switzerland))

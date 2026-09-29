@@ -22,6 +22,7 @@ from .storage import ImportResult, LocalStore, MONTHLY_KPIS, month_label, period
 
 LOGGER = logging.getLogger(__name__)
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
+APP_LOGO = ASSETS / "app_logo.png"
 STYLE = """
 QWidget { color: #29343e; font-family: 'Segoe UI'; font-size: 13px; }
 QMainWindow, QWidget#shell, QWidget#page { background: #f2f4f6; }
@@ -72,13 +73,13 @@ class Card(QFrame):
     def __init__(self, watermark: bool = False):
         super().__init__()
         self.setObjectName("card")
-        self.watermark = QPixmap(str(ASSETS / "parcom_logo.png")) if watermark else QPixmap()
+        self.watermark = QPixmap(str(APP_LOGO)) if watermark else QPixmap()
 
     def paintEvent(self, event):
         super().paintEvent(event)
         if not self.watermark.isNull():
             painter = QPainter(self)
-            painter.setOpacity(0.035)
+            painter.setOpacity(0.08)
             image = self.watermark.scaled(160, 160, Qt.AspectRatioMode.KeepAspectRatio,
                                           Qt.TransformationMode.SmoothTransformation)
             painter.drawPixmap(self.width() - image.width() - 16, self.height() - image.height() - 16, image)
@@ -161,7 +162,7 @@ class MainWindow(QMainWindow):
         self.worker: ImportWorker | None = None
         self.import_rows: list[list[str]] = []
         self.setWindowTitle(APP_NAME)
-        self.setWindowIcon(QIcon(str(ASSETS / "parcom_logo.png")))
+        self.setWindowIcon(QIcon(str(APP_LOGO)))
         self.resize(1280, 800)
         self.setMinimumSize(1050, 650)
         self.setStyleSheet(STYLE)
@@ -178,9 +179,8 @@ class MainWindow(QMainWindow):
         head.setContentsMargins(28, 12, 28, 12)
         icon = QLabel()
         icon.setFixedSize(42, 42)
-        icon.setStyleSheet("background:#29343e;border-radius:8px;")
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon.setPixmap(QPixmap(str(ASSETS / "parcom_logo.png")).scaled(40, 40, Qt.AspectRatioMode.KeepAspectRatio,
+        icon.setPixmap(QPixmap(str(APP_LOGO)).scaled(40, 40, Qt.AspectRatioMode.KeepAspectRatio,
                                                                  Qt.TransformationMode.SmoothTransformation))
         head.addWidget(icon)
         head.addSpacing(6)

@@ -127,7 +127,7 @@ Alle Ticketdaten werden ausschliesslich lokal verarbeitet. Die Anwendung übertr
 ## Projektstruktur
 
 ```text
-assets/parcom_logo.png           ParCom-Symbol und dezentes Wasserzeichen
+assets/app_logo.png              Anwendungslogo, Fenstersymbol und dezentes Wasserzeichen
 parcom_analytics/
     __main__.py                 Anwendungsstart, Protokollierung und Instanzsperre
     storage.py                  Dateinamen, Excel-Import und JSON-Persistenz
