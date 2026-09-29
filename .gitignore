@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local Znuny exports and generated reports must never be committed.
+*.xlsx
+*.pdf
+data/
+exports/
+logs/
+index.json
+index.corrupt-*.json
+.validation/

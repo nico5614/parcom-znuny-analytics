@@ -1,0 +1,8 @@
+[project]
+name = "parcom-znuny-analytics"
+version = "0.1.0.dev0"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
