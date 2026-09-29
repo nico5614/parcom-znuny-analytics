@@ -48,6 +48,30 @@ def test_age_boundaries_and_unknowns(tickets):
     assert result.note
 
 
+@pytest.mark.parametrize("kpi", [3, 7])
+@pytest.mark.parametrize("missing", [["Status"], ["Priorität"], ["Status", "Priorität"]])
+def test_age_kpis_allow_missing_optional_detail_columns(tickets, kpi, missing):
+    expected = analyze(kpi, tickets)
+    result = analyze(kpi, tickets.drop(columns=missing))
+    assert result.metrics == expected.metrics
+    pd.testing.assert_series_equal(result.chart, expected.chart)
+    assert result.details["Ticket#"].tolist() == expected.details["Ticket#"].tolist()
+    for column in missing:
+        assert result.details[column].isna().all()
+        assert column in result.note
+    for column in set(result.details.columns) - set(missing):
+        pd.testing.assert_series_equal(result.details[column], expected.details[column])
+
+
+@pytest.mark.parametrize("kpi", [3, 7])
+def test_optional_column_warning_preserves_invalid_age_warning(tickets, kpi):
+    tickets.loc[0, "Alter"] = "invalid"
+    result = analyze(kpi, tickets.drop(columns=["Status", "Priorität"]))
+    assert "Status" in result.note and "Priorität" in result.note
+    assert "1 Tickets ohne gültige Altersangabe" in result.note
+    assert result.chart["Unbekannt"] == 1
+
+
 def test_escalation_follow_up(tickets):
     result = analyze(4, tickets)
     assert result.metrics == {"Offene Tickets im Export": 6, "Davon Erstantwort eskaliert": 3}

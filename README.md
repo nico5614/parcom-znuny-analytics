@@ -44,12 +44,14 @@ Benötigte Spalten:
 | --- | --- |
 | 1 | `Ticket#`, `Titel`, `Erstellt`, `Status` |
 | 2 | `Ticket#`, `Titel`, `Schließzeit`, `Status` |
-| 3, 7 | `Ticket#`, `Alter`, `Titel`, `Status`, `Priorität` |
+| 3, 7 | `Ticket#`, `Alter`, `Titel`; optional: `Status`, `Priorität` |
 | 4 | `Ticket#`, `Titel`, `Alter`, `Status`, `Priorität`, `FirstResponseTimeEscalation`, `FirstResponseTimeDestinationDate` |
 | 5 | `Ticket#`, `Titel`, `Erstantwortzeit in Minuten` |
 | 6 | `Ticket#`, `Titel`, `Lösungszeit in Minuten` |
 
 Altersangaben wie `31 m`, `2 h 45 m` und `446 d 18 h` werden in Minuten umgerechnet. «Älter als» ist eine strikte Grenze: Genau sieben Tage zählen nicht zu «älter als 7 Tage». Nicht lesbare Alters- oder Datumswerte werden sichtbar ausgewiesen. Fehlende, negative oder unendliche Minutenwerte werden ausgeschlossen und gemeldet; **0 Minuten bleiben enthalten**. Eskalationswerte müssen 0 oder 1 sein; 1 bedeutet eskaliert. Tabellen mit Zeitkennzahlen sind absteigend sortiert; Alterstabellen zeigen die ältesten Tickets zuerst.
+
+Bei KPI 3 und 7 sind `Status` und `Priorität` zusätzliche Tabellenangaben. Fehlen diese Spalten, funktionieren Kennzahlen und Altersdiagramm weiterhin. Die fehlenden Angaben erscheinen als «–» in der Tabelle; Dashboard und PDF weisen darauf hin. Status und Priorität werden nicht aus anderen Feldern abgeleitet.
 
 ## Entwicklungsumgebung
 

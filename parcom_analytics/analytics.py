@@ -114,9 +114,11 @@ def analyze(kpi: int, source: pd.DataFrame) -> Analysis:
     frame = source.copy()
     frame.columns = [str(column).strip() for column in frame.columns]
     required = DETAIL_COLUMNS[kpi] + (["FirstResponseTimeEscalation"] if kpi == 4 else [])
+    if kpi in {3, 7}:
+        required = ["Ticket#", "Alter", "Titel"]
     if not frame.columns.is_unique or not set(required).issubset(frame.columns):
         raise DataError("Die importierte Datei enthält nicht alle benötigten Spalten für diese KPI.")
-    details = frame[DETAIL_COLUMNS[kpi]].copy()
+    details = frame.reindex(columns=DETAIL_COLUMNS[kpi]).copy()
     note = ""
     if kpi in {1, 2}:
         field = "Erstellt" if kpi == 1 else "Schließzeit"
@@ -134,6 +136,10 @@ def analyze(kpi: int, source: pd.DataFrame) -> Analysis:
         return Analysis(kpi, metrics, counts, "Tickets nach Erstellungstag" if kpi == 1 else "Tickets nach Schliessungstag",
                         "daily", details, "Ticketdetails", note)
     if kpi in {3, 7}:
+        notes = []
+        missing_details = [column for column in ("Status", "Priorität") if column not in frame.columns]
+        if missing_details:
+            notes.append(f"Nicht im Export enthalten: {', '.join(missing_details)}. Diese Angaben werden als «–» angezeigt.")
         ages = frame["Alter"].map(parse_age).astype(float)
         metrics = {"Aktuell offene Tickets" if kpi == 3 else "Anzahl wartende Tickets": len(frame),
                    "Ältestes offenes Ticket" if kpi == 3 else "Ältestes wartendes Ticket":
@@ -149,10 +155,10 @@ def analyze(kpi: int, source: pd.DataFrame) -> Analysis:
         missing = int(ages.isna().sum())
         if missing:
             chart["Unbekannt"] = missing
-            note = f"{missing} Tickets ohne gültige Altersangabe; Alterskennzahlen berücksichtigen nur gültige Werte."
+            notes.append(f"{missing} Tickets ohne gültige Altersangabe; Alterskennzahlen berücksichtigen nur gültige Werte.")
         details = details.loc[ages.sort_values(ascending=False, na_position="last", kind="stable").index]
         return Analysis(kpi, metrics, chart, "Ticketbestand nach Alter", "bar", details,
-                        "Ticketdetails · älteste zuerst", note)
+                        "Ticketdetails · älteste zuerst", " ".join(notes))
     if kpi == 4:
         flags = numeric_values(frame["FirstResponseTimeEscalation"])
         if not flags.isin([0, 1]).all():

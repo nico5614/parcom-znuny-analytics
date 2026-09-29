@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 
 import pandas as pd
+import pytest
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtTest import QTest
@@ -110,6 +111,35 @@ def test_missing_kpi_month_columns_and_local_file(qapp, tmp_path, tickets):
     window.refresh_dashboard()
     assert window.analysis is None
     assert "erneut" in window.empty_body.text()
+    window.close()
+
+
+@pytest.mark.parametrize("kpi", [3, 7])
+def test_age_dashboard_and_pdf_without_optional_columns(qapp, tmp_path, tickets, kpi):
+    from parcom_analytics.pdf_export import export_pdf
+
+    source = tmp_path / filename(kpi)
+    tickets[["Ticket#", "Alter", "Titel"]].to_excel(source, index=False)
+    store = LocalStore(tmp_path / "storage")
+    assert store.import_file(source).status == "Importiert"
+    window = MainWindow(store)
+    window.kpi_combo.setCurrentIndex(kpi)
+    assert window.analysis is not None
+    assert window.dashboard_stack.currentIndex() == 1
+    assert window.pdf_button.isEnabled()
+    assert "Status, Priorität" in window.data_note.text()
+    model = window.detail_table.model()
+    assert model.rowCount() == len(tickets)
+    assert model.data(model.index(0, 3)) == "–"
+    assert model.data(model.index(0, 4)) == "–"
+    pdf = tmp_path / "optional-details.pdf"
+    export_pdf(pdf, window.analysis, window.current_period, window.figure)
+    document = QPdfDocument()
+    assert document.load(str(pdf)) == QPdfDocument.Error.None_
+    text = " ".join(document.getAllText(page).text() for page in range(document.pageCount()))
+    assert "Nicht im Export enthalten: Status, Priorität" in text
+    assert "DEMO-006" in text
+    document.close()
     window.close()
 
 
