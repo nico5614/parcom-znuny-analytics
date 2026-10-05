@@ -69,7 +69,7 @@ def test_complete_desktop_workflow(qapp, tmp_path, tickets, monkeypatch):
     pdf = tmp_path / "dashboard.pdf"
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *args: (str(pdf), ""))
     monkeypatch.setattr(QMessageBox, "information", lambda *args: None)
-    window.navigate(3)
+    window.navigate(4)
     QTest.mouseClick(window.pdf_button, Qt.MouseButton.LeftButton)
     assert pdf.read_bytes().startswith(b"%PDF")
     document = QPdfDocument()

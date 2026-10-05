@@ -1,4 +1,4 @@
-"""The four-page native Qt desktop interface."""
+"""The native Qt desktop interface."""
 
 import logging
 from pathlib import Path
@@ -187,7 +187,7 @@ class MainWindow(QMainWindow):
         head.addWidget(label(APP_NAME, "brand", False))
         head.addStretch()
         self.nav_buttons = []
-        for index, name in enumerate(["Start", "Upload", "Dashboard", "Download"]):
+        for index, name in enumerate(["Start", "Upload", "Dashboard", "Service Desk", "Download"]):
             button = QPushButton(name)
             button.setObjectName("nav")
             button.setCheckable(True)
@@ -202,6 +202,9 @@ class MainWindow(QMainWindow):
         self._build_start()
         self._build_upload()
         self._build_dashboard()
+        from .service_desk_ui import ServiceDeskPage
+        self.service_desk = ServiceDeskPage(store)
+        self.stack.addWidget(self.service_desk)
         self._build_download()
         footer = QHBoxLayout()
         footer.setContentsMargins(28, 8, 28, 12)
@@ -345,7 +348,7 @@ class MainWindow(QMainWindow):
         layout = self._compact_page()
         layout.addWidget(label("PDF-BERICHT", "eyebrow"))
         layout.addWidget(label("Auswertung exportieren", "title"))
-        layout.addWidget(label("Exportieren Sie die aktuelle Dashboard-Ansicht mit Kennzahlen, Diagramm und vollständiger Detailtabelle.", "muted"))
+        layout.addWidget(label("Exportieren Sie die unter «Dashboard» ausgewählte KPI mit Kennzahlen, Diagramm und vollständiger Detailtabelle.", "muted"))
         layout.addSpacing(8)
         layout.addWidget(label("Aktuelle KPI", "section"))
         self.download_kpi = label("–", "muted")
@@ -361,6 +364,8 @@ class MainWindow(QMainWindow):
 
     def navigate(self, index: int):
         self.stack.setCurrentIndex(index)
+        if index == 3:
+            self.service_desk.refresh()
         for position, button in enumerate(self.nav_buttons):
             button.setChecked(position == index)
 
@@ -406,6 +411,8 @@ class MainWindow(QMainWindow):
         errors = len(self.import_rows) - imported - duplicates
         self.upload_summary.setText(f"{imported} importiert · {duplicates} bereits vorhanden · {errors} nicht importiert")
         self.kpi_changed()
+        if self.stack.currentIndex() == 3:
+            self.service_desk.refresh()
 
     def kpi_changed(self):
         kpi = self.kpi_combo.currentData()
