@@ -29,7 +29,7 @@ def test_monthly_counts_and_days(tickets, kpi, field):
 def test_age_metrics_and_oldest_first(tickets, kpi):
     result = analyze(kpi, tickets)
     assert list(result.metrics.values())[0] == 6
-    assert list(result.metrics.values())[1] == "446 T 18 Std"
+    assert list(result.metrics.values())[1] == "446 d 18 h"
     assert result.metrics["Älter als 7 Tage"] == 3
     assert result.metrics["Älter als 30 Tage"] == 2
     assert result.details.iloc[0]["Ticket#"] == "DEMO-006"

@@ -1,6 +1,6 @@
 """Pure KPI calculations using exported rows, independent of the UI."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 import math
 import re
@@ -51,6 +51,10 @@ class Analysis:
     details: pd.DataFrame
     table_title: str
     note: str = ""
+    references: dict[str, float] = field(default_factory=dict)
+    row_highlights: list[str] = field(default_factory=list)
+    maximum_rows: set[int] = field(default_factory=set)
+    highlight_note: str = ""
 
 
 def parse_age(value: object) -> int | None:
@@ -63,14 +67,27 @@ def parse_age(value: object) -> int | None:
     return days * 1440 + hours * 60 + minutes
 
 
-def format_age(minutes: float) -> str:
-    days, remaining = divmod(int(minutes), 1440)
+def format_duration(minutes: object) -> str:
+    """Render numeric minutes without losing fractional minutes or zero values."""
+    try:
+        value = float(minutes)
+    except (TypeError, ValueError):
+        return "–"
+    if not math.isfinite(value) or value < 0:
+        return "–"
+    days, remaining = divmod(round(value, 1), 1440)
     hours, minute = divmod(remaining, 60)
-    if days:
-        return f"{days} T {hours} Std"
+    parts = [f"{int(days)} d"] if days else []
     if hours:
-        return f"{hours} Std {minute} Min"
-    return f"{minute} Min"
+        parts.append(f"{int(hours)} h")
+    if minute or not parts:
+        text = f"{minute:.1f}".rstrip("0").rstrip(".").replace(".", ",")
+        parts.append(f"{text} min")
+    return " ".join(parts)
+
+
+def format_age(minutes: float) -> str:
+    return format_duration(minutes)
 
 
 def format_value(value: object) -> str:
@@ -83,6 +100,34 @@ def format_value(value: object) -> str:
     if isinstance(value, int):
         return f"{value:,}".replace(",", "’")
     return str(value)
+
+
+def field_label(column: str) -> str:
+    return {"FirstResponseTimeDestinationDate": "Erstantwort fällig am",
+            "Erstantwortzeit in Minuten": "Reaktionszeit", "Lösungszeit in Minuten": "Lösungszeit"}.get(column, column)
+
+
+def detail_value(column: str, value: object) -> str:
+    if column == "Ticket#":
+        if pd.isna(value):
+            return "–"
+        return str(int(value)) if isinstance(value, (float, int)) and float(value).is_integer() else str(value)
+    if column in {"Erstantwortzeit in Minuten", "Lösungszeit in Minuten"}:
+        return format_duration(value)
+    if column == "Alter":
+        return format_duration(parse_age(value))
+    return format_value(value)
+
+
+def metric_items(analysis: Analysis) -> list[tuple[str, str]]:
+    items = [(name.replace(" (Min.)", ""), format_duration(value) if "(Min.)" in name else format_value(value))
+             for name, value in analysis.metrics.items()]
+    if analysis.kpi in {1, 2}:
+        items.extend([("Tagesdurchschnitt", format_value(analysis.references["daily_mean"])),
+                      ("Höchster Tageswert", str(int(analysis.references["daily_max"])))])
+    if analysis.kpi == 4:
+        items.append(("Eskalationsquote", f'{format_value(analysis.references["escalation_rate"])} %'))
+    return items
 
 
 def numeric_values(values: pd.Series) -> pd.Series:
@@ -134,7 +179,9 @@ def analyze(kpi: int, source: pd.DataFrame) -> Analysis:
             note = f"{missing} Tickets ohne gültiges Datum sind in der Gesamtzahl, aber nicht im Tagesdiagramm enthalten."
         metrics = {"Anzahl neue Tickets" if kpi == 1 else "Anzahl geschlossene Tickets": len(frame)}
         return Analysis(kpi, metrics, counts, "Tickets nach Erstellungstag" if kpi == 1 else "Tickets nach Schliessungstag",
-                        "daily", details, "Ticketdetails", note)
+                        "daily", details, "Ticketdetails", note,
+                        references={"daily_mean": float(counts.mean()) if len(counts) else 0.0,
+                                    "daily_max": float(counts.max()) if len(counts) else 0.0})
     if kpi in {3, 7}:
         notes = []
         missing_details = [column for column in ("Status", "Priorität") if column not in frame.columns]
@@ -148,17 +195,24 @@ def analyze(kpi: int, source: pd.DataFrame) -> Analysis:
         if kpi == 3:
             metrics["Älter als 14 Tage"] = int((ages > 14 * 1440).sum())
         metrics["Älter als 30 Tage"] = int((ages > 30 * 1440).sum())
-        chart = pd.Series({"Bis 7 Tage": int((ages <= 7 * 1440).sum()),
-                           "Über 7–14 Tage": int(((ages > 7 * 1440) & (ages <= 14 * 1440)).sum()),
-                           "Über 14–30 Tage": int(((ages > 14 * 1440) & (ages <= 30 * 1440)).sum()),
-                           "Über 30 Tage": int((ages > 30 * 1440).sum())})
+        chart = pd.Series({"0–7 Tage": int((ages <= 7 * 1440).sum()),
+                           "8–14 Tage": int(((ages > 7 * 1440) & (ages <= 14 * 1440)).sum()),
+                           "15–30 Tage": int(((ages > 14 * 1440) & (ages <= 30 * 1440)).sum()),
+                           ">30 Tage": int((ages > 30 * 1440).sum())})
         missing = int(ages.isna().sum())
         if missing:
             chart["Unbekannt"] = missing
             notes.append(f"{missing} Tickets ohne gültige Altersangabe; Alterskennzahlen berücksichtigen nur gültige Werte.")
         details = details.loc[ages.sort_values(ascending=False, na_position="last", kind="stable").index]
+        sorted_ages = ages.loc[details.index]
         return Analysis(kpi, metrics, chart, "Ticketbestand nach Alter", "bar", details,
-                        "Ticketdetails · älteste zuerst", " ".join(notes))
+                        "Ticketdetails · älteste zuerst", " ".join(notes),
+                        references={"invalid_values": missing},
+                        row_highlights=["critical" if age > 30 * 1440 else "attention" if age > 14 * 1440 else ""
+                                        for age in sorted_ages],
+                        maximum_rows={index for index, age in enumerate(sorted_ages) if age == ages.max()},
+                        highlight_note="Amber: über 14 bis 30 Tage · Rot: über 30 Tage · Fett: älteste Tickets. "
+                                       "Die Altersklassen verwenden exakte Grenzen bei 7, 14 und 30 Tagen; keine SLA-Bewertung.")
     if kpi == 4:
         flags = numeric_values(frame["FirstResponseTimeEscalation"])
         if not flags.isin([0, 1]).all():
@@ -167,7 +221,10 @@ def analyze(kpi: int, source: pd.DataFrame) -> Analysis:
         count = int(escalated.sum())
         return Analysis(kpi, {"Offene Tickets im Export": len(frame), "Davon Erstantwort eskaliert": count},
                         pd.Series({"Eskaliert": count, "Nicht eskaliert": len(frame) - count}),
-                        "Erstantwort-Eskalation", "bar", details.loc[escalated], "Eskalierte Tickets · Nachverfolgung")
+                        "Erstantwort-Eskalation", "donut", details.loc[escalated], "Eskalierte Tickets · Nachverfolgung",
+                        references={"escalation_rate": count / len(frame) * 100 if len(frame) else 0.0},
+                        row_highlights=["critical"] * count,
+                        highlight_note="Rot: Erstantwort eskaliert (FirstResponseTimeEscalation = 1).")
     field = "Erstantwortzeit in Minuten" if kpi == 5 else "Lösungszeit in Minuten"
     values = numeric_values(frame[field])
     valid = values.dropna()
@@ -182,5 +239,16 @@ def analyze(kpi: int, source: pd.DataFrame) -> Analysis:
                "Werte mit 0 Minuten": int(valid.eq(0).sum())}
     details[field] = values
     details = details.loc[valid.sort_values(ascending=False, kind="stable").index]
+    percentile = float(valid.quantile(0.75)) if len(valid) else float("nan")
+    maximum = float(valid.max()) if len(valid) else float("nan")
+    sorted_values = values.loc[details.index]
     return Analysis(kpi, metrics, valid, "Verteilung der Reaktionszeit" if kpi == 5 else "Verteilung der Lösungszeit",
-                    "histogram", details, "Langsamste Reaktionen" if kpi == 5 else "Längste Lösungszeiten", note)
+                    "histogram", details, "Langsamste Reaktionen" if kpi == 5 else "Längste Lösungszeiten", note,
+                    references={"mean": float(valid.mean()), "median": float(valid.median()), "p75": percentile,
+                                "maximum": maximum, "invalid_values": missing},
+                    row_highlights=["critical" if value == maximum and value > valid.min() else
+                                    "attention" if value > percentile else "" for value in sorted_values],
+                    maximum_rows={index for index, value in enumerate(sorted_values) if value == maximum},
+                    highlight_note=f"Amber: über dem 75. Perzentil ({format_duration(percentile)}) · "
+                                   "Rot: Höchstwert bei unterschiedlichen Werten · Fett: Höchstwerte. "
+                                   "Bei gleichen Werten keine farbliche Ausreissermarkierung; keine SLA-Grenzen.")

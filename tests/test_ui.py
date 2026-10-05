@@ -56,6 +56,7 @@ def test_complete_desktop_workflow(qapp, tmp_path, tickets, monkeypatch):
         qapp.processEvents()
         assert window.analysis is not None
         assert window.analysis.kpi == kpi
+        window.download_combo.setCurrentIndex(kpi)
         assert window.pdf_button.isEnabled()
         assert window.month_combo.isVisible() == (kpi in {1, 2, 5, 6})
         assert len(window.figure.axes) == 1
@@ -126,6 +127,7 @@ def test_age_dashboard_and_pdf_without_optional_columns(qapp, tmp_path, tickets,
     window.kpi_combo.setCurrentIndex(kpi)
     assert window.analysis is not None
     assert window.dashboard_stack.currentIndex() == 1
+    window.download_combo.setCurrentIndex(kpi)
     assert window.pdf_button.isEnabled()
     assert "Status, Priorität" in window.data_note.text()
     model = window.detail_table.model()
@@ -163,6 +165,6 @@ def test_pdf_contains_all_rows_and_repeats_table_headers(qapp, tmp_path, tickets
     for number in range(len(data)):
         assert f"SYNTHETIC-{number:04}" in text
     assert all("Ticket#" in re.sub(r"\s+", "", page) for page in pages[1:])
-    assert all("Seite" in page for page in pages)
+    assert all("Seite" in re.sub(r"\s+", "", page) for page in pages)
     document.close()
     window.close()

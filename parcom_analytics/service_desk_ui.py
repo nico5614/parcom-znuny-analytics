@@ -13,8 +13,10 @@ from PySide6.QtWidgets import (
 )
 
 from .service_desk import (
-    HISTORY_MESSAGE, METRICS, Report, build_report, history_series, score_status,
+    HISTORY_MESSAGE, METRICS, Report, build_report, score_status,
 )
+from .analytics import format_duration
+from .charts import draw_score_history
 from .storage import LocalStore, month_label, reporting_month
 from .ui import Card, label, set_table, table_view
 
@@ -59,7 +61,7 @@ def metric_text(key: str, value: float) -> str:
     if unit == "share":
         return f"{number(value * 100)} %"
     if unit == "minutes":
-        return f"{number(value)} Min."
+        return format_duration(value)
     return f"{int(value):,}".replace(",", "’")
 
 
@@ -259,33 +261,7 @@ class ServiceDeskPage(QScrollArea):
         self.period_issues.setText("\n".join(f"{month_label(period.month)}: {period.issue}" for period in report.periods if period.issue))
 
     def _draw_history(self):
-        self.figure.clear()
-        series = history_series(self.report)
-        if series.empty:
-            self.canvas.draw()
-            return
-        axis = self.figure.add_subplot(111)
-        self.figure.subplots_adjust(left=0.07, right=0.97, top=0.88, bottom=0.22)
-        for bottom, top, color in [(0, 60, "#bd3838"), (60, 75, "#e87926"),
-                                   (75, 90, "#d7c750"), (90, 100, "#23784c")]:
-            axis.axhspan(bottom, top, color=color, alpha=0.08, linewidth=0)
-        axis.plot(range(len(series)), series.values, color="#285c63", linewidth=2, marker="o", markersize=5)
-        if self.report.current:
-            index = len(series) - 1
-            value = self.report.current.value
-            axis.scatter([index], [value], color=score_status(value)[1], s=80, zorder=3, edgecolor="white")
-            axis.annotate(f"{number(value)} %", (index, value), xytext=(0, 10), textcoords="offset points",
-                          ha="center", color="#29343e", fontsize=10, fontweight="bold")
-        axis.set_ylim(0, 108)
-        axis.set_xlim(-0.5, len(series) - 0.5)
-        axis.set_yticks([0, 60, 75, 90, 100], ["0 %", "60 %", "75 %", "90 %", "100 %"])
-        # Keep long histories readable while preserving every plotted period.
-        step = max(1, (len(series) + 7) // 8)
-        ticks = sorted(set(range(0, len(series), step)) | {len(series) - 1})
-        axis.set_xticks(ticks, [month_label(series.index[index]).replace(" ", "\n") for index in ticks])
-        axis.tick_params(axis="both", length=0, labelsize=9, colors="#65727d", pad=8)
-        axis.spines[["top", "right", "left", "bottom"]].set_visible(False)
-        axis.grid(axis="y", color="white", linewidth=1)
+        draw_score_history(self.figure, self.report)
         self.history_note.setText("Exportmonate · Erster berechenbarer Score; für einen Verlauf werden weitere vollständige Monate benötigt."
                                   if len(self.report.scores) == 1 else "Exportmonate · Lücken kennzeichnen fehlende oder nicht vergleichbare Datenstände.")
         self.canvas.draw()

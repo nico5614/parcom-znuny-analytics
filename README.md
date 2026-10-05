@@ -9,25 +9,36 @@ Windows-Desktopanwendung zur lokalen Auswertung von Service-KPIs der PBX-Abteilu
 - Ein skalierbares Hauptfenster mit **Start**, **Upload**, **Dashboard**, **Service Desk** und **Download**; Standardgrösse 1280 × 800, Mindestgrösse 1050 × 650.
 - Mehrfachimport von `.xlsx`-Dateien mit Prüfung von Dateiname, Exportdatum, Uhrzeit, Zeitzone und Arbeitsmappe.
 - Dauerhafte lokale Kopien und SHA-256-Duplikatprüfung. Ein identischer Inhalt mit derselben KPI und demselben Exportzeitpunkt wird nicht erneut importiert. Ein neuer Exportzeitpunkt bleibt als eigener Datenstand erhalten, auch wenn sich die Ticketliste nicht geändert hat.
-- Automatische Auswahl des neuesten Exports je KPI und Berichtsmonat beziehungsweise des neuesten Snapshots.
+- Automatische Auswahl des neuesten Exports je KPI und Berichtsmonat beziehungsweise des neuesten Snapshots; ältere Berichtsmonate und Snapshots bleiben auswählbar.
 - Kennzahlen, Diagramme und Detailtabellen für alle sieben KPIs. Beim Start ist keine KPI vorausgewählt.
 - Trendbasierter Service Desk Performance Score mit transparenter Berechnung, Teilbereichen, Monatsverlauf und Erklärung der Veränderungen.
-- PDF-Export der aktuellen Auswertung über einen Speichern-Dialog: KPI, Zeitraum, Kennzahlen, Diagramm, Erstellungszeitpunkt und vollständige Detailtabelle; lange Tabellen werden auf mehrere Seiten verteilt.
+- Unabhängige Berichtsauswahl unter **Download**, einschliesslich älterer Berichtsmonate und Snapshots. Dashboard und Service Desk müssen vorher nicht geöffnet werden.
+- PDF-Berichte mit denselben Kennzahlen, Diagrammen, Vergleichswerten und Tabellenmarkierungen wie im Dashboard; vollständige Detailtabellen werden bei Bedarf auf mehrere Seiten verteilt.
+- Aggregierter Service-Desk-PDF-Bericht mit Management-Kennzahlen, bestehendem Performance Score, Verläufen und transparenter Datenbasis; ohne Ticketdetails oder Kundendaten.
+- Anklickbare Ticketnummern werden in die Zwischenablage kopiert; eine kurze Meldung bestätigt das Kopieren.
 - Verständliche Leerzustände und Fehlermeldungen sowie lokale, rotierende Protokolldateien.
 
 ## Unterstützte KPIs
 
 | KPI | Auswertung | Zeitraum |
 | --- | --- | --- |
-| 1 | Neue Tickets mit Tagesverteilung | Monat |
-| 2 | Geschlossene Tickets mit Tagesverteilung | Monat |
-| 3 | Offene Tickets, Alter und Altersgrenzen | Snapshot |
-| 4 | Offene Tickets nach Erstantwort-Eskalation; Nachverfolgung eskalierter Tickets | Snapshot |
-| 5 | Reaktionszeit: Anzahl, Durchschnitt, Median, Nullwerte und Verteilung | Monat |
-| 6 | Lösungszeit: Anzahl, Durchschnitt, Median, Nullwerte und Verteilung | Monat |
-| 7 | Wartende Tickets, Alter und Altersgrenzen | Snapshot |
+| 1 | Tagesbalken mit Durchschnittslinie und beschrifteten Höchstwerten; orange Mengenkennzahl ohne Warnbewertung | Monat |
+| 2 | Tagesbalken mit Durchschnittslinie und beschrifteten Höchstwerten; neutrale Mengenbewertung | Monat |
+| 3 | Altersklassen mit Amber/Rot für ältere Tickets; dezente Zeilenmarkierungen und älteste Tickets fett | Snapshot |
+| 4 | Donut mit Eskalationsquote und Anzahl; eskalierte Tickets dezent rot | Snapshot |
+| 5 | Histogramm mit Median und Durchschnitt; menschenlesbare Zeiten; Perzentil-/Höchstwertmarkierung | Monat |
+| 6 | Histogramm mit Median und Durchschnitt; menschenlesbare Zeiten; Perzentil-/Höchstwertmarkierung | Monat |
+| 7 | Altersklassen, markierte alte Tickets und fett hervorgehobene älteste Tickets | Snapshot |
 
-Der Berichtsmonat ist der **vorherige Kalendermonat des Exportdatums**, auch beim Jahreswechsel. Ein Export vom 29.09.2026 gehört zu August 2026. Snapshot-KPIs zeigen den Datenstand mit Datum und Uhrzeit aus dem Dateinamen und haben keine Monatsauswahl.
+Der Berichtsmonat ist der **vorherige Kalendermonat des Exportdatums**, auch beim Jahreswechsel. Ein Export vom 29.09.2026 gehört zu August 2026. Snapshot-KPIs zeigen den tatsächlichen Datenstand mit Datum und Uhrzeit aus dem Dateinamen. Sie haben eine Datenstandsauswahl anstelle einer Monatsauswahl.
+
+Das Einzel-KPI-Dashboard zeigt einen Verlauf bis zum ausgewählten Monat beziehungsweise Snapshot sowie den Vergleich zum unmittelbar vorherigen vorhandenen Datenstand. Für KPI 5/6 steht der Median im Vordergrund; der Durchschnitt wird ergänzend dargestellt. Bei Bestands-KPIs wird auch die Anzahl der Tickets über 30 Tage gezeigt. Ein einzelner Datenstand erzeugt keine behauptete Entwicklung. Nicht lesbare oder wegen ihrer Zeitzone nicht vergleichbare historische Dateien werden als Lücken gemeldet. Die bestehenden Regeln des Service-Desk-Scores bleiben davon getrennt unverändert.
+
+Der Tagesdurchschnitt von KPI 1/2 berücksichtigt alle Kalendertage des im Diagramm abgebildeten Zeitraums, einschliesslich Tagen ohne Tickets. Tage über dem Durchschnitt und Höchstwerte verwenden dunklere Orangetöne. Die Altersklassen «0–7 / 8–14 / 15–30 / >30 Tage» verwenden weiterhin die exakten Grenzen bei 7, 14 und 30 Tagen; beispielsweise gehört 7 Tage plus 1 Minute zur zweiten Klasse. Amber markiert über 14 bis 30 Tage, Rot über 30 Tage. Dies sind Aufmerksamkeitshinweise, keine erfundenen SLA-Grenzen.
+
+Für KPI 5/6 wird das 75. Perzentil aus den gültigen Minutenwerten des gewählten Datensatzes mit linearer Interpolation berechnet. Werte darüber werden amber markiert; die höchsten Werte bei einer nicht konstanten Verteilung rot. Alle Höchstwerte sind fett. Bei ausschliesslich gleichen Werten gibt es keine farbliche Ausreissermarkierung. Nullwerte bleiben enthalten. Die Regeln und das konkrete Perzentil stehen direkt über der Tabelle und im PDF.
+
+Eine gemeinsame Zeitformatierung wird in Kennzahlen, Tabellen, Diagrammen, Vergleichen, Service Desk und PDFs verwendet: beispielsweise `83 → 1 h 23 min`, `1823 → 1 d 6 h 23 min`, `5874 → 4 d 1 h 54 min`. Bruchteile einer Minute werden auf eine Dezimalstelle gerundet angezeigt. Berechnungen verwenden weiterhin numerische Minutenwerte.
 
 Die Anwendung verwendet die erste Tabelle der Arbeitsmappe, entfernt Leerzeichen an den Spaltennamen und benötigt keine feste Spaltenreihenfolge. Die Znuny-Abfrage muss bereits die jeweilige PBX-Ticketmenge liefern; die Anwendung filtert diese nicht nochmals nach Queue, Status oder Kalendermonat.
 
@@ -94,7 +105,19 @@ Null-Minuten-Werte bleiben enthalten. Fehlende Dateien oder benötigte Spalten s
 
 Der Gesamtscore und die Veränderung werden auf eine Dezimalstelle gerundet. 0,0 Prozentpunkte gelten als unverändert. Die Statusfarben beziehen sich auf den dargestellten **Trendindex**: ab 90 % grün / «Sehr gut», ab 75 % gelb / «Gut», ab 60 % orange / «Aufmerksamkeit erforderlich», darunter rot / «Kritisch». Die Aufschlüsselung zeigt jeden Vorher-/Nachher-Wert, seine Entwicklung und seinen Teilscore.
 
-Die Historie wird lokal aus den importierten Dateien rekonstruiert und bleibt nach einem Neustart erhalten. Der bestehende PDF-Export unter **Download** bezieht sich weiterhin auf die ausgewählte Einzel-KPI unter **Dashboard**.
+Die Historie wird lokal aus den importierten Dateien rekonstruiert und bleibt nach einem Neustart erhalten. Der PDF-Export wird unabhängig unter **Download** ausgewählt.
+
+## Berichtszentrale und PDF-Export
+
+Unter **Download** zuerst eine KPI oder **Service Desk – Gesamtübersicht** auswählen. Für Monats-KPIs erscheinen nur vorhandene Berichtsmonate, für Snapshot-KPIs nur vorhandene Datenstände. Der neueste Eintrag ist standardmässig ausgewählt; ältere Einträge bleiben verfügbar. Die Auswahl im Dashboard beeinflusst diese Auswahl nicht.
+
+Einzel-KPI-Berichte enthalten die ausgewählte Auswertung, die verbesserten Diagramme, historische Entwicklung bis zum gewählten Datenstand, den Vergleich zum vorherigen verfügbaren Datenstand und sämtliche Ticketdetails mit denselben Hervorhebungen. Berechnungen und Formatierung werden mit der Oberfläche geteilt. Der Dateiname enthält KPI und Berichtsmonat beziehungsweise Snapshot-Zeitpunkt, etwa `KPI_5_Reaktionszeit_2026-09.pdf`.
+
+**Service Desk – Gesamtübersicht** benötigt gültige aktuelle Datensätze für alle sieben KPIs. Fehlt eine KPI oder ein benötigter Alters-/Zeitwert, bleibt der Export deaktiviert. Ein vollständiger einzelner Datenstand genügt für den Management-Bericht; der Performance Score bleibt ohne ausreichende Historie ausdrücklich nicht verfügbar. Die Score-Formel wird nicht verändert.
+
+Der Management-Bericht verwendet die jeweils aktuellste vorhandene Datei je KPI. Er enthält neue und geschlossene Tickets, offene und wartende Tickets einschliesslich Beständen über 30 Tage, Eskalationsquote, Zeitmediane, Vergleichswerte und Verläufe. Abschlussverhältnis und Ticketdifferenz werden nur bei übereinstimmenden Berichtsmonaten von KPI 1 und 2 angegeben; bei null neuen Tickets ist das Verhältnis nicht berechenbar. Ticketdifferenz bedeutet geschlossene minus neue Tickets. Die Datenbasis nennt für jede KPI Berichtszeitraum, Exportzeitpunkt und Zeitzone; der Score nennt seinen eigenen Vergleichszeitraum.
+
+Der Service-Desk-Bericht enthält **keine Ticketnummern, Titel, Kundendaten oder personenbezogenen Ticketdetails**. Er erhält den Standardnamen `Service_Desk_<Erstellungsdatum>.pdf`. Alle Berichte werden mit Qt über den bestehenden Speichern-Dialog erzeugt. Es wird keine zusätzliche Bibliothek benötigt.
 
 ## Entwicklungsumgebung
 
@@ -126,7 +149,7 @@ Alternativ:
 1. Unter **Upload** einen oder mehrere Znuny-Exporte auswählen.
 2. Unter **Dashboard** die KPI und bei Monats-KPIs den verfügbaren Berichtsmonat auswählen.
 3. Unter **Service Desk** bei ausreichender Historie den Performance Score und seine Herleitung prüfen.
-4. Unter **Download** die ausgewählte Einzel-KPI mit **Als PDF exportieren** speichern.
+4. Unter **Download** unabhängig die gewünschte Auswertung und den Zeitraum auswählen und mit **Als PDF exportieren** speichern. Dieser Schritt funktioniert auch direkt nach dem Upload oder einem Neustart.
 
 Ein zweiter gleichzeitiger Anwendungsstart wird verhindert, damit sich Schreibzugriffe auf den Dateiindex nicht überschneiden. Während eines Imports bleibt die Oberfläche bedienbar; die Anwendung kann nach Abschluss des Imports geschlossen werden.
 
@@ -139,6 +162,8 @@ Ein zweiter gleichzeitiger Anwendungsstart wird verhindert, damit sich Schreibzu
 Die Tests verwenden ausschliesslich synthetische DataFrames und temporär erzeugte Excel-Dateien. Sie prüfen Dateinamen, Zeitzonen, Monatswechsel, Altersparser, Duplikate, Dateikopien, Neustart-Persistenz, beschädigte Indizes, Spaltenprüfungen und alle KPI-Berechnungen.
 
 Qt-Integrationstests prüfen Navigation, konstante Fenstergrösse, Leerzustände, Import über den Upload-Button, Monats- und Snapshot-Auswertungen, PDF-Freigabe sowie ein- und mehrseitige PDF-Inhalte. Sie laufen ohne sichtbares Testfenster; native Dateidialoge werden dabei durch temporäre Testpfade ersetzt.
+
+Zusätzliche Berichtstests prüfen Altersklassen und Markierungsgrenzen, gemeinsame Zeitformatierung, Perzentile und Höchstwerte, Tagesdurchschnitte, Donut-Quote, Referenzlinien, verfügbare Exportzeiträume, die unabhängige Download-Auswahl, Zwischenablage, Neustart und vollständige Management-Daten. PDF-Tests vergleichen die Werte mit der zentralen Analyse und prüfen, dass im Management-Bericht keine synthetischen Ticket-Identifikatoren oder Titel vorkommen.
 
 Score-Tests prüfen Formel und Gewichtung, Nullwerte, Statusgrenzen, historische Vergleichbarkeit, Jahreswechsel, Lücken, ungültige Daten, die Auswahl neuester Exporte und den fehlenden Einfluss von KPI 1/2. Der Service-Desk-Integrationstest importiert drei synthetische Monatsdatenstände, prüft die automatische Aktualisierung, den Verlauf, beide Fenstergrössen und die Wiederherstellung nach einem Neustart.
 
@@ -183,6 +208,7 @@ parcom_analytics/
     service_desk.py             Periodenvergleich und transparenter Performance Score
     service_desk_ui.py          Service-Desk-Register, Verlauf und Datengrundlage
     charts.py                   Matplotlib-Diagramme
+    reports.py                  Gemeinsame Berichtsauswahl, Einzel-KPI-Verlauf und Management-Daten
     ui.py                       Native Qt-Seiten und Tabellen
     pdf_export.py               Paginierter PDF-Export mit Qt
 tests/                          Fach- und Integrationstests

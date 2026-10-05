@@ -248,7 +248,9 @@ def test_service_desk_import_refresh_persistence_and_navigation(qapp, tmp_path, 
         qapp.processEvents()
         assert window.size() == QSize(1280, 800)
     assert window.analysis.kpi == 7
-    assert "KPI 7" in window.download_kpi.text()
+    assert window.download_combo.currentData() is None
+    window.download_combo.setCurrentIndex(7)
+    assert window.download_report.analysis.kpi == 7
     window.navigate(3)
     window.resize(1050, 650)
     qapp.processEvents()

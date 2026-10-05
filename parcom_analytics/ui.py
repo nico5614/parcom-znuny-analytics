@@ -6,19 +6,21 @@ from pathlib import Path
 import pandas as pd
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QThread, Signal
-from PySide6.QtGui import QIcon, QPainter, QPixmap
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
-    QAbstractItemView, QComboBox, QFileDialog, QFrame, QHBoxLayout,
+    QAbstractItemView, QApplication, QComboBox, QFileDialog, QFrame, QHBoxLayout,
     QHeaderView, QLabel, QLayout, QMainWindow, QMessageBox, QPushButton, QScrollArea,
     QSizePolicy, QStackedWidget, QTableView, QVBoxLayout, QWidget,
 )
 
 from . import APP_NAME, VERSION
-from .analytics import Analysis, DataError, KPI_DESCRIPTIONS, KPI_TITLES, analyze, format_value
-from .charts import draw_chart
-from .pdf_export import export_pdf
-from .storage import ImportResult, LocalStore, MONTHLY_KPIS, month_label, period_label, read_workbook
+from .analytics import Analysis, DataError, KPI_DESCRIPTIONS, KPI_TITLES, detail_value, field_label, metric_items
+from .charts import ROW_COLORS, draw_chart, draw_history
+from .pdf_export import export_management_pdf, export_pdf
+from .reports import (KpiReport, ManagementReport, available_records, comparison_label, comparison_rows,
+                      default_report_filename, load_management_report, load_report)
+from .storage import ImportResult, LocalStore, MONTHLY_KPIS, month_label, period_label
 
 LOGGER = logging.getLogger(__name__)
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
@@ -86,9 +88,10 @@ class Card(QFrame):
 
 
 class FrameModel(QAbstractTableModel):
-    def __init__(self, frame: pd.DataFrame):
+    def __init__(self, frame: pd.DataFrame, analysis: Analysis | None = None):
         super().__init__()
         self.frame = frame.reset_index(drop=True)
+        self.analysis = analysis
 
     def rowCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self.frame)
@@ -97,14 +100,30 @@ class FrameModel(QAbstractTableModel):
         return 0 if parent.isValid() else len(self.frame.columns)
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
-        if index.isValid() and role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.ToolTipRole):
-            return format_value(self.frame.iat[index.row(), index.column()])
+        if not index.isValid():
+            return None
+        column = str(self.frame.columns[index.column()])
+        value = self.frame.iat[index.row(), index.column()]
+        if role == Qt.ItemDataRole.ToolTipRole and column == "Ticket#":
+            return "Klicken, um die Ticketnummer zu kopieren"
+        if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.ToolTipRole):
+            return detail_value(column, value)
+        if role == Qt.ItemDataRole.ForegroundRole and column == "Ticket#":
+            return QColor("#285c63")
+        if role == Qt.ItemDataRole.FontRole:
+            font = QFont()
+            font.setUnderline(column == "Ticket#")
+            font.setBold(bool(self.analysis and index.row() in self.analysis.maximum_rows))
+            return font
+        if role == Qt.ItemDataRole.BackgroundRole and self.analysis and self.analysis.row_highlights:
+            color = ROW_COLORS.get(self.analysis.row_highlights[index.row()])
+            return QColor(color) if color else None
         return None
 
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
             field = str(self.frame.columns[section])
-            return "Erstantwort fällig am" if field == "FirstResponseTimeDestinationDate" else field
+            return field_label(field)
         return None
 
 
@@ -123,9 +142,9 @@ def table_view() -> QTableView:
     return table
 
 
-def set_table(table: QTableView, frame: pd.DataFrame) -> None:
+def set_table(table: QTableView, frame: pd.DataFrame, analysis: Analysis | None = None) -> None:
     old_model = table.model()
-    model = FrameModel(frame)
+    model = FrameModel(frame, analysis)
     model.setParent(table)
     table.setModel(model)
     if old_model:
@@ -158,6 +177,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.store = store
         self.analysis: Analysis | None = None
+        self.current_report: KpiReport | None = None
+        self.download_report: KpiReport | ManagementReport | None = None
         self.current_period = ""
         self.worker: ImportWorker | None = None
         self.import_rows: list[list[str]] = []
@@ -288,6 +309,10 @@ class MainWindow(QMainWindow):
         self.month_combo.setAccessibleName("Berichtsmonat")
         self.month_combo.setMinimumWidth(170)
         controls.addWidget(self.month_combo)
+        self.snapshot_combo = QComboBox()
+        self.snapshot_combo.setAccessibleName("Datenstand auswählen")
+        self.snapshot_combo.setMinimumWidth(245)
+        controls.addWidget(self.snapshot_combo)
         layout.addLayout(controls)
         self.dashboard_stack = QStackedWidget()
         layout.addWidget(self.dashboard_stack, 1)
@@ -321,7 +346,7 @@ class MainWindow(QMainWindow):
         chart_layout.setContentsMargins(8, 0, 8, 0)
         self.figure = Figure(figsize=(10, 2.5), dpi=100)
         self.canvas = FigureCanvasQTAgg(self.figure)
-        self.canvas.setMinimumHeight(190)
+        self.canvas.setMinimumHeight(260)
         self.canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         chart_layout.addWidget(self.canvas)
         content_layout.addWidget(chart_card, 3)
@@ -332,10 +357,35 @@ class MainWindow(QMainWindow):
         table_layout.setContentsMargins(14, 12, 14, 8)
         self.table_title = label("", "section")
         table_layout.addWidget(self.table_title)
+        self.highlight_note = label("", "muted")
+        table_layout.addWidget(self.highlight_note)
+        self.copy_note = label("", "eyebrow")
+        self.copy_note.hide()
+        table_layout.addWidget(self.copy_note)
+        self.copy_timer = QTimer(self)
+        self.copy_timer.setSingleShot(True)
+        self.copy_timer.timeout.connect(self.copy_note.hide)
         self.detail_table = table_view()
-        self.detail_table.setMinimumHeight(115)
+        self.detail_table.setMinimumHeight(155)
+        self.detail_table.clicked.connect(self.copy_ticket)
         table_layout.addWidget(self.detail_table, 1)
         content_layout.addWidget(table_card, 2)
+        self.history_card = Card()
+        history_layout = QVBoxLayout(self.history_card)
+        history_layout.setContentsMargins(14, 12, 14, 12)
+        history_layout.addWidget(label("Historische Entwicklung", "section"))
+        self.history_note = label("", "muted")
+        history_layout.addWidget(self.history_note)
+        self.history_figure = Figure(figsize=(10, 2.3), dpi=100)
+        self.history_canvas = FigureCanvasQTAgg(self.history_figure)
+        self.history_canvas.setMinimumHeight(230)
+        history_layout.addWidget(self.history_canvas)
+        self.comparison_title = label("", "muted")
+        history_layout.addWidget(self.comparison_title)
+        self.comparison_table = table_view()
+        self.comparison_table.setFixedHeight(105)
+        history_layout.addWidget(self.comparison_table)
+        content_layout.addWidget(self.history_card)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(content)
@@ -343,29 +393,43 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(page)
         self.kpi_combo.currentIndexChanged.connect(self.kpi_changed)
         self.month_combo.currentIndexChanged.connect(self.refresh_dashboard)
+        self.snapshot_combo.currentIndexChanged.connect(self.refresh_dashboard)
 
     def _build_download(self):
         layout = self._compact_page()
         layout.addWidget(label("PDF-BERICHT", "eyebrow"))
         layout.addWidget(label("Auswertung exportieren", "title"))
-        layout.addWidget(label("Exportieren Sie die unter «Dashboard» ausgewählte KPI mit Kennzahlen, Diagramm und vollständiger Detailtabelle.", "muted"))
-        layout.addSpacing(8)
-        layout.addWidget(label("Aktuelle KPI", "section"))
-        self.download_kpi = label("–", "muted")
-        layout.addWidget(self.download_kpi)
-        layout.addWidget(label("Zeitraum / Datenstand", "section"))
-        self.download_period = label("–", "muted")
-        layout.addWidget(self.download_period)
+        layout.addWidget(label("Erstellen Sie einen PDF-Bericht aus den importierten Znuny-Daten.", "muted"))
+        layout.addWidget(label("Auswertung", "section"))
+        self.download_combo = QComboBox()
+        self.download_combo.setAccessibleName("Auswertung für PDF auswählen")
+        self.download_combo.addItem("Auswertung auswählen...", None)
+        for kpi, title in KPI_TITLES.items():
+            self.download_combo.addItem(title.replace(" letzter Monat", ""), kpi)
+        self.download_combo.addItem("Service Desk – Gesamtübersicht", "service_desk")
+        layout.addWidget(self.download_combo)
+        self.download_period_label = label("Berichtsmonat", "section")
+        layout.addWidget(self.download_period_label)
+        self.download_period_combo = QComboBox()
+        self.download_period_combo.setAccessibleName("Berichtszeitraum für PDF auswählen")
+        layout.addWidget(self.download_period_combo)
+        self.download_basis = label("Aktuellste verfügbare KPI-Daten", "muted")
+        layout.addWidget(self.download_basis)
         self.download_note = label("", "muted")
         layout.addWidget(self.download_note)
         self.pdf_button = QPushButton("Als PDF exportieren")
         self.pdf_button.clicked.connect(self.save_pdf)
         layout.addWidget(self.pdf_button, 0, Qt.AlignmentFlag.AlignLeft)
+        self.download_combo.currentIndexChanged.connect(self.refresh_download_choices)
+        self.download_period_combo.currentIndexChanged.connect(self._refresh_download)
+        self.refresh_download_choices()
 
     def navigate(self, index: int):
         self.stack.setCurrentIndex(index)
         if index == 3:
             self.service_desk.refresh()
+        elif index == 4:
+            self.refresh_download_choices()
         for position, button in enumerate(self.nav_buttons):
             button.setChecked(position == index)
 
@@ -411,6 +475,7 @@ class MainWindow(QMainWindow):
         errors = len(self.import_rows) - imported - duplicates
         self.upload_summary.setText(f"{imported} importiert · {duplicates} bereits vorhanden · {errors} nicht importiert")
         self.kpi_changed()
+        self.refresh_download_choices()
         if self.stack.currentIndex() == 3:
             self.service_desk.refresh()
 
@@ -426,6 +491,16 @@ class MainWindow(QMainWindow):
             self.month_combo.setCurrentIndex(existing)
         self.month_combo.blockSignals(False)
         self.month_combo.setVisible(kpi in MONTHLY_KPIS)
+        self.snapshot_combo.blockSignals(True)
+        previous_snapshot = self.snapshot_combo.currentData()
+        self.snapshot_combo.clear()
+        if kpi and kpi not in MONTHLY_KPIS:
+            for record in available_records(self.store, kpi):
+                self.snapshot_combo.addItem(period_label(record).removeprefix("Datenstand: "), record.stored_path)
+        existing_snapshot = self.snapshot_combo.findData(previous_snapshot)
+        if existing_snapshot >= 0:
+            self.snapshot_combo.setCurrentIndex(existing_snapshot)
+        self.snapshot_combo.blockSignals(False)
         self.refresh_dashboard()
 
     def _empty(self, title: str, body: str = ""):
@@ -435,9 +510,11 @@ class MainWindow(QMainWindow):
 
     def refresh_dashboard(self):
         self.analysis = None
+        self.current_report = None
         self.current_period = ""
         kpi = self.kpi_combo.currentData()
         self.month_combo.setVisible(kpi in MONTHLY_KPIS)
+        self.snapshot_combo.setVisible(bool(kpi and kpi not in MONTHLY_KPIS))
         if not self.store.records:
             self._empty("Keine Dateien hochgeladen", "Importieren Sie zuerst Znuny-Excel-Dateien unter «Upload».")
         elif not kpi:
@@ -445,22 +522,22 @@ class MainWindow(QMainWindow):
         elif not any(record.kpi_number == kpi for record in self.store.records):
             self._empty("Keine Datei für diese KPI vorhanden.")
         else:
-            record = self.store.latest(kpi, self.month_combo.currentData())
+            record = self.store.latest(kpi, self.month_combo.currentData()) if kpi in MONTHLY_KPIS else next(
+                (item for item in available_records(self.store, kpi) if item.stored_path == self.snapshot_combo.currentData()), None)
             if record is None:
                 self._empty("Für den ausgewählten Monat ist keine Datei vorhanden.")
             else:
                 try:
-                    analysis = analyze(kpi, read_workbook(self.store.root / record.stored_path))
-                    self._render_analysis(analysis, period_label(record))
+                    report = load_report(self.store, record)
+                    self._render_analysis(report.analysis, period_label(record), report)
                 except DataError as error:
                     LOGGER.warning("KPI %s: required columns or values missing", kpi)
                     self._empty("Auswertung nicht möglich", str(error))
                 except Exception as error:
                     LOGGER.error("Dashboard KPI %s failed: %s", kpi, type(error).__name__)
                     self._empty("Auswertung nicht möglich", "Die gespeicherte Excel-Datei konnte nicht ausgewertet werden. Bitte importieren Sie die Datei erneut.")
-        self._refresh_download()
 
-    def _render_analysis(self, analysis: Analysis, period: str):
+    def _render_analysis(self, analysis: Analysis, period: str, report: KpiReport | None = None):
         self.dashboard_title.setText(KPI_TITLES[analysis.kpi])
         self.description.setText(KPI_DESCRIPTIONS[analysis.kpi])
         self.period.setText(period)
@@ -468,33 +545,96 @@ class MainWindow(QMainWindow):
             previous_card = self.metrics_layout.takeAt(0).widget()
             previous_card.hide()
             previous_card.deleteLater()
-        for heading, value in analysis.metrics.items():
+        for heading, value in metric_items(analysis):
             card = Card()
             box = QVBoxLayout(card)
             box.setContentsMargins(16, 12, 16, 12)
             box.addWidget(label(heading, "muted"))
-            box.addWidget(label(format_value(value), "metric"))
+            box.addWidget(label(value, "metric"))
             self.metrics_layout.addWidget(card, 1)
         draw_chart(self.figure, analysis)
         self.canvas.draw()
         self.data_note.setText(analysis.note)
         self.data_note.setVisible(bool(analysis.note))
         self.table_title.setText(f"{analysis.table_title} · {len(analysis.details)} Tickets")
-        set_table(self.detail_table, analysis.details)
+        self.highlight_note.setText(analysis.highlight_note)
+        self.highlight_note.setVisible(bool(analysis.highlight_note))
+        self.copy_note.hide()
+        set_table(self.detail_table, analysis.details, analysis)
+        self.history_card.setVisible(report is not None)
+        if report:
+            draw_history(self.history_figure, report)
+            self.history_canvas.draw()
+            self.history_note.setText(report.history_note)
+            self.history_note.setVisible(bool(report.history_note))
+            self.comparison_title.setText(comparison_label(report))
+            set_table(self.comparison_table, comparison_rows(report))
+            self.comparison_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.dashboard_stack.setCurrentIndex(1)
         self.analysis, self.current_period = analysis, period
+        self.current_report = report
+
+    def copy_ticket(self, index: QModelIndex):
+        model = self.detail_table.model()
+        if not index.isValid() or model.frame.columns[index.column()] != "Ticket#":
+            return
+        value = model.data(index)
+        if value and value != "–":
+            QApplication.clipboard().setText(value)
+            self.copy_note.setText(f"Ticketnummer kopiert: {value}")
+            self.copy_note.show()
+            self.copy_timer.start(2500)
+
+    def refresh_download_choices(self):
+        kpi = self.download_combo.currentData()
+        previous = self.download_period_combo.currentData()
+        self.download_period_combo.blockSignals(True)
+        self.download_period_combo.clear()
+        if isinstance(kpi, int):
+            for record in available_records(self.store, kpi):
+                self.download_period_combo.addItem(period_label(record).removeprefix("Datenstand: "), record.stored_path)
+        existing = self.download_period_combo.findData(previous)
+        if existing >= 0:
+            self.download_period_combo.setCurrentIndex(existing)
+        self.download_period_combo.blockSignals(False)
+        self.download_period_label.setText("Datenbasis" if kpi == "service_desk" else "Berichtsmonat" if kpi in MONTHLY_KPIS else "Datenstand")
+        self.download_period_label.setVisible(kpi is not None)
+        self.download_period_combo.setVisible(isinstance(kpi, int))
+        self.download_basis.setVisible(kpi == "service_desk")
+        self._refresh_download()
 
     def _refresh_download(self):
-        self.pdf_button.setEnabled(self.analysis is not None)
-        self.download_kpi.setText(KPI_TITLES[self.analysis.kpi] if self.analysis else "–")
-        self.download_period.setText(self.current_period or "–")
-        self.download_note.setText("Die zur Ansicht gehörende Tabelle wird vollständig und bei Bedarf auf mehreren Seiten exportiert."
-                                   if self.analysis else "Es ist keine auswertbare Dashboard-Ansicht vorhanden.")
+        self.download_report = None
+        kpi = self.download_combo.currentData()
+        note = "Wählen Sie eine Auswertung aus."
+        try:
+            if not self.store.records:
+                note = "Keine Auswertungen verfügbar.\nImportieren Sie zuerst Znuny-Excel-Dateien unter «Upload»."
+            elif kpi == "service_desk":
+                self.download_report = load_management_report(self.store)
+                note = "PDF enthält:\n• Management-Kennzahlen\n• Performance Score, sofern verfügbar\n• Vergleichswerte und Trenddiagramme\n• Datenbasis\n\nAggregierter Bericht ohne Ticketdetails und Kundendaten."
+            elif isinstance(kpi, int):
+                record = next((item for item in available_records(self.store, kpi)
+                               if item.stored_path == self.download_period_combo.currentData()), None)
+                if record is None:
+                    note = "Für diese KPI sind keine Daten vorhanden."
+                else:
+                    self.download_report = load_report(self.store, record)
+                    note = "PDF enthält:\n• Zeitraum und Kennzahlen\n• Diagramm mit Referenzwerten\n• Historische Entwicklung und Vergleich\n• Vollständige Ticketdetails"
+        except DataError as error:
+            note = "Nicht verfügbar\n" + str(error)
+        except Exception as error:
+            LOGGER.error("Report selection failed: %s", type(error).__name__)
+            note = "Die Auswertung konnte nicht geladen werden. Bitte prüfen Sie die lokal gespeicherten Dateien."
+        self.download_note.setText(note)
+        self.pdf_button.setEnabled(self.download_report is not None)
 
     def save_pdf(self):
-        if self.analysis is None:
+        self._refresh_download()
+        report = self.download_report
+        if report is None:
             return
-        default = self.store.root / "exports" / f"ParCom_KPI_{self.analysis.kpi}.pdf"
+        default = self.store.root / "exports" / default_report_filename(report)
         filename, _ = QFileDialog.getSaveFileName(self, "Auswertung als PDF speichern", str(default), "PDF-Dateien (*.pdf)")
         if not filename:
             return
@@ -502,8 +642,13 @@ class MainWindow(QMainWindow):
         if path.suffix.lower() != ".pdf":
             path = path.with_suffix(".pdf")
         try:
-            export_pdf(path, self.analysis, self.current_period, self.figure)
-            LOGGER.info("PDF exported for KPI %s", self.analysis.kpi)
+            if isinstance(report, ManagementReport):
+                export_management_pdf(path, report)
+            else:
+                figure = Figure(figsize=(10, 2.8), dpi=100)
+                draw_chart(figure, report.analysis)
+                export_pdf(path, report.analysis, period_label(report.record), figure, report)
+            LOGGER.info("PDF exported: %s", "Service Desk" if isinstance(report, ManagementReport) else f"KPI {report.analysis.kpi}")
             QMessageBox.information(self, "PDF exportiert", "Die Auswertung wurde erfolgreich als PDF gespeichert.")
         except Exception as error:
             LOGGER.error("PDF export failed: %s", type(error).__name__)
