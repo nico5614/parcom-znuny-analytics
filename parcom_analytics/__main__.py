@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from . import APP_NAME, APP_ID, VERSION
 from .storage import LocalStore, default_storage_path
 from .ui import MainWindow
-from .theme import APP_ICON, STYLE
+from .theme import APP_ICON, STYLE, application_font
 
 
 def main() -> int:
@@ -26,7 +26,7 @@ def main() -> int:
     app.setWindowIcon(QIcon(str(APP_ICON)))
     app.setStyle("Fusion")
     app.setStyleSheet(STYLE)
-    app.setFont(QFont("Segoe UI", 10))
+    app.setFont(application_font())
     QLocale.setDefault(QLocale(QLocale.Language.German, QLocale.Country.Switzerland))
     try:
         root = default_storage_path()

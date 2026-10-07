@@ -83,8 +83,8 @@ def fetch_live(client, period: DateRange, cancel: Event, progress=lambda value: 
         return ids
 
     def dated(field):
-        return {f"Ticket{field}TimeNewerDate": f"{period.start} 00:00:00",
-                f"Ticket{field}TimeOlderDate": f"{period.end} 23:59:59", "SearchInArchive": "AllTickets"}
+        return {f"Ticket{field}TimeNewerDate": period.start.strftime("%Y-%m-%d %H:%M:%S") if isinstance(period.start, datetime) else f"{period.start} 00:00:00",
+                f"Ticket{field}TimeOlderDate": period.end.strftime("%Y-%m-%d %H:%M:%S") if isinstance(period.end, datetime) else f"{period.end} 23:59:59", "SearchInArchive": "AllTickets"}
 
     new_ids = search(dated("Create"))
     closed_ids = search({**dated("Close"), "StateType": "Closed"})

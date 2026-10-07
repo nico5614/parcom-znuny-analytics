@@ -11,6 +11,7 @@ from pathlib import Path
 import pandas as pd
 
 from .analytics import Analysis, DataError, analyze, date_values
+from .periods import TimeRange
 from .live_data import DateRange, LiveBatch, NORMALIZED_COLUMNS, TIMEZONE
 from .reports import HistoryPoint, KpiReport, management_report
 from .service_desk import Period, compare_periods, fill_period
@@ -52,7 +53,12 @@ def restore_analysis(item):
 def monthly_frames(batch, month):
     start = date.fromisoformat(month + "-01")
     end = (pd.Timestamp(start) + pd.offsets.MonthEnd()).date()
-    if batch.period.start > start or batch.period.end < end:
+    first = batch.period.start.date() if isinstance(batch.period.start, datetime) else batch.period.start
+    last = batch.period.end.date() if isinstance(batch.period.end, datetime) else batch.period.end
+    if isinstance(batch.period.start, datetime):
+        if batch.period.start > datetime.combine(start, datetime.min.time(), batch.period.start.tzinfo) or batch.period.end < datetime.combine(end, datetime.max.time().replace(microsecond=0), batch.period.end.tzinfo):
+            return None
+    if first > start or last < end:
         return None
     frames = {}
     for kpi in MONTHLY_KPIS:
@@ -77,7 +83,7 @@ class LiveCache:
             try:
                 payload = json.loads(self.path.read_text(encoding="utf-8"))
                 current = payload["current"]
-                period = DateRange(date.fromisoformat(current["start"]), date.fromisoformat(current["end"]))
+                period = (TimeRange(datetime.fromisoformat(current["start"]), datetime.fromisoformat(current["end"])) if "T" in current["start"] else DateRange(date.fromisoformat(current["start"]), date.fromisoformat(current["end"])))
                 datetime.fromisoformat(current["captured_at"])
                 frames = {int(kpi): pd.DataFrame(rows, columns=NORMALIZED_COLUMNS, dtype=object)
                           for kpi, rows in current["frames"].items()}
@@ -100,7 +106,7 @@ class LiveCache:
             record = LiveRecord(kpi, batch.captured_at, TIMEZONE, None, key)
             history[key] = {"record": asdict(record), "analysis": aggregate(analyses[kpi])}
         monthly = {}
-        for month in pd.period_range(batch.period.start, batch.period.end, freq="M").astype(str):
+        for month in pd.period_range(batch.period.start.date() if isinstance(batch.period.start, datetime) else batch.period.start, batch.period.end.date() if isinstance(batch.period.end, datetime) else batch.period.end, freq="M").astype(str):
             frames = monthly_frames(batch, month)
             if frames is None:
                 continue

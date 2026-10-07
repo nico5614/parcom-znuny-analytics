@@ -197,6 +197,7 @@ def test_score_decline_stability_and_incomplete_latest_ui(qapp, history, tickets
     assert page.empty_card.isVisible()
     assert not page.hero.isVisible()
     assert not page.changes_card.isVisible()
+    page.detail_button.setChecked(True)
     assert page.history_card.isVisible()
     assert "November 2026" in page.period_label.text()
     assert len(page.figure.axes[0].collections) == 0  # No historic point is highlighted as current.

@@ -25,6 +25,7 @@ from .storage import ImportResult, LocalStore, MONTHLY_KPIS, month_label, period
 from .connection import ConnectionController
 from .live_cache import LiveCache
 from .live_data import DateRange
+from .timeline import Timeline
 from .animations import Animator
 from .analytics import format_duration, format_value
 
@@ -146,6 +147,7 @@ class MainWindow(QMainWindow):
     def __init__(self, store: LocalStore, require_login=False):
         super().__init__()
         self.store = store
+        self.production = require_login
         self.settings = QSettings(str(store.root / "settings.ini"), QSettings.Format.IniFormat)
         self.animator = Animator(self, reduced=bool(QApplication.instance().property("reduce_motion")) or
                                 self.settings.value("reduce_motion", False, type=bool))
@@ -176,7 +178,7 @@ class MainWindow(QMainWindow):
         horizontal.setSpacing(0)
         sidebar = QFrame()
         sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(188)
+        sidebar.setFixedWidth(216)
         side = QVBoxLayout(sidebar)
         side.setContentsMargins(14, 24, 14, 20)
         side.setSpacing(8)
@@ -188,17 +190,17 @@ class MainWindow(QMainWindow):
         side.addWidget(label("SERVICE-ANALYSE", "eyebrow"))
         side.addSpacing(28)
         self.nav_buttons = []
-        for index, name in enumerate(["Info", "Import", "KPIs", "Übersicht", "Berichte"]):
+        for index, name in enumerate(["Info", "Import", "Analysen", "Übersicht", "Export", "Agenten"]):
             button = QPushButton(name)
             button.setObjectName("nav")
             button.setCheckable(True)
             button.clicked.connect(lambda checked=False, page=index: self.navigate(page))
             self.nav_buttons.append(button)
-        for index in (3, 2, 1, 4):
+        for index in (3, 2, 5, 4):
             side.addWidget(self.nav_buttons[index])
         side.addStretch()
         side.addWidget(self.nav_buttons[0])
-        self.logout_button = QPushButton("Abmelden")
+        self.logout_button = QPushButton("Logout")
         self.logout_button.setObjectName("secondary")
         self.logout_button.clicked.connect(self.logout)
         side.addWidget(self.logout_button)
@@ -221,6 +223,13 @@ class MainWindow(QMainWindow):
         self.service_desk.animator = self.animator
         self.stack.addWidget(self.service_desk)
         self._build_download()
+        self.agent_page = QWidget()
+        agent_layout = QVBoxLayout(self.agent_page)
+        agent_layout.setContentsMargins(24, 24, 24, 24)
+        agent_layout.addWidget(label("Agenten", "title"))
+        agent_layout.addWidget(label("Noch keine Agentenauswertung geladen", "muted"))
+        agent_layout.addStretch()
+        self.stack.addWidget(self.agent_page)
         footer = QHBoxLayout()
         footer.setContentsMargins(28, 8, 28, 12)
         self.connection_status = label("", "muted", False)
@@ -229,7 +238,9 @@ class MainWindow(QMainWindow):
         footer.addWidget(label(f"Version {DISPLAY_VERSION}", "muted", False))
         outer.addLayout(footer)
         self.refresh_dashboard()
-        self.navigate(0)
+        if require_login:
+            self.source_combo.setCurrentIndex(1)
+        self.navigate(3 if require_login else 0)
         self._build_login(shell, require_login)
         self.connection.stateChanged.connect(self._connection_state)
         self.connection.loggedIn.connect(self._login_succeeded)
@@ -237,7 +248,7 @@ class MainWindow(QMainWindow):
         self.connection.loaded.connect(self._live_loaded)
         self.connection.failed.connect(self._network_error)
         self.connection.busyChanged.connect(self._network_busy)
-        self.connection.progress.connect(lambda value: self.loading.setFormat(f"Znuny-Daten werden geladen … {value} %"))
+
         self._connection_state("offline")
 
     @property
@@ -245,38 +256,37 @@ class MainWindow(QMainWindow):
         return self.source_combo.currentData() == "live"
 
     def _build_connection_controls(self, outer):
-        controls = QVBoxLayout()
-        controls.setContentsMargins(28, 12, 28, 0)
-        source_row, range_row = QHBoxLayout(), QHBoxLayout()
+        controls = QHBoxLayout()
+        controls.setContentsMargins(24, 12, 24, 0)
         self.source_combo = QComboBox()
         self.source_combo.addItem("Lokale Excel-Daten", "excel")
         self.source_combo.addItem("Znuny Live / letzter Datenstand", "live")
+        self.source_combo.hide()
         self.range_combo = QComboBox()
-        for text, value in [("7 Tage", "7d"), ("30 Tage", "30d"), ("3 Monate", "3m"),
-                            ("6 Monate", "6m"), ("12 Monate", "12m"), ("Benutzerdefiniert", "custom")]:
+        for text, value in [("1 Woche", "7d"), ("1 Monat", "30d"), ("3 Monate", "3m"), ("6 Monate", "6m"), ("1 Jahr", "12m"), ("Benutzerdefiniert", "custom")]:
             self.range_combo.addItem(text, value)
-        self.range_combo.setCurrentIndex(1)
+        self.range_combo.hide()
         self.from_date, self.to_date = QDateEdit(), QDateEdit()
-        for widget, offset in [(self.from_date, -29), (self.to_date, 0)]:
-            widget.setCalendarPopup(True)
-            widget.setDisplayFormat("dd.MM.yyyy")
-            widget.setDate(QDate.currentDate().addDays(offset))
-            widget.setMaximumDate(QDate.currentDate())
-            widget.hide()
+        self.from_date.hide()
+        self.to_date.hide()
+        heading = QVBoxLayout()
+        heading.addWidget(label("Service Desk", "title"))
+        heading.addWidget(label("PBX · Znuny Analytics", "muted"))
+        heading.addStretch()
+        controls.addLayout(heading, 1)
+        self.timeline = Timeline()
+        self.timeline.setMaximumWidth(700)
+        self.timeline.changed.connect(self.refresh_live)
+        controls.addWidget(self.timeline, 3)
+        actions = QVBoxLayout()
         self.refresh_button = QPushButton("↻ Aktualisieren")
         self.refresh_button.clicked.connect(self.refresh_live)
         self.connect_button = QPushButton("Verbinden")
+        self.connect_button.setObjectName("secondary")
         self.connect_button.clicked.connect(self.show_login)
-        source_row.addWidget(self.source_combo)
-        source_row.addStretch()
-        source_row.addWidget(self.connect_button)
-        for widget in [self.range_combo, self.from_date, self.to_date, self.refresh_button]:
-            range_row.addWidget(widget)
-        range_row.addStretch()
-        controls.addLayout(source_row)
-        controls.addLayout(range_row)
-        self.range_combo.hide()
-        self.refresh_button.hide()
+        actions.addWidget(self.refresh_button)
+        actions.addWidget(self.connect_button)
+        controls.addLayout(actions)
         outer.addLayout(controls)
         self.loading = QProgressBar()
         self.loading.setRange(0, 0)
@@ -286,7 +296,6 @@ class MainWindow(QMainWindow):
         self.network_note = label(self.live_cache.warning, "warning")
         self.network_note.setVisible(bool(self.live_cache.warning))
         outer.addWidget(self.network_note)
-        self.range_combo.currentIndexChanged.connect(self._range_changed)
         self.source_combo.currentIndexChanged.connect(self._source_changed)
 
     def _build_login(self, shell, required):
@@ -420,9 +429,8 @@ class MainWindow(QMainWindow):
         self.to_date.setVisible(custom)
 
     def _source_changed(self):
-        self.range_combo.setVisible(self.is_live)
+        self.timeline.setVisible(self.is_live)
         self.refresh_button.setVisible(self.is_live)
-        self._range_changed()
         self._connection_state(self.connection.state)
         self.service_desk.live_cache = self.live_cache if self.is_live else None
         self.kpi_changed()
@@ -433,8 +441,8 @@ class MainWindow(QMainWindow):
         if self.connection.worker or self.connection.state != "online":
             return
         try:
-            period = (DateRange(self.from_date.date().toPython(), self.to_date.date().toPython())
-                      if self.range_combo.currentData() == "custom" else DateRange.preset(self.range_combo.currentData()))
+            period = self.timeline.period()
+            self.timeline.sync_controls()
         except DataError as error:
             self._network_error(str(error))
             return
@@ -589,14 +597,14 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(28, 20, 28, 8)
         layout.setSpacing(12)
         controls = QHBoxLayout()
-        controls.addWidget(label("KPI-Analyse", "title"))
+        controls.addWidget(label("Analysen", "title"))
         controls.addStretch()
         self.kpi_combo = QComboBox()
         self.kpi_combo.setAccessibleName("KPI auswählen")
         self.kpi_combo.setMinimumWidth(270)
-        self.kpi_combo.addItem("KPI auswählen...", None)
+        self.kpi_combo.addItem("Analyse auswählen...", None)
         for kpi, title in KPI_TITLES.items():
-            self.kpi_combo.addItem(title, kpi)
+            self.kpi_combo.addItem(title.split(" – ", 1)[-1], kpi)
         controls.addWidget(self.kpi_combo)
         self.month_combo = QComboBox()
         self.month_combo.setAccessibleName("Berichtsmonat")
@@ -698,7 +706,7 @@ class MainWindow(QMainWindow):
         self.download_combo.setAccessibleName("Auswertung für PDF auswählen")
         self.download_combo.addItem("Auswertung auswählen...", None)
         for kpi, title in KPI_TITLES.items():
-            self.download_combo.addItem(title.replace(" letzter Monat", ""), kpi)
+            self.download_combo.addItem(title.split(" – ", 1)[-1].replace(" letzter Monat", ""), kpi)
         self.download_combo.addItem("Service Desk – Gesamtübersicht", "service_desk")
         layout.addWidget(self.download_combo)
         self.download_period_label = label("Berichtsmonat", "section")
@@ -813,7 +821,7 @@ class MainWindow(QMainWindow):
         self.snapshot_combo.setVisible(not self.is_live and bool(kpi and kpi not in MONTHLY_KPIS))
         if self.is_live:
             if not self.live_reports:
-                self._empty("Keine lokalen Znuny-Daten verfügbar.", "Verbinden Sie sich mit Znuny und wählen Sie «Aktualisieren».")
+                self._empty("Noch kein Datenstand geladen", "Verbinden Sie sich mit Znuny und wählen Sie «Aktualisieren».")
             elif not kpi:
                 self._empty("Keine KPI ausgewählt", "Wählen Sie oben eine KPI aus, um die Auswertung anzuzeigen.")
             else:
@@ -845,7 +853,7 @@ class MainWindow(QMainWindow):
     def _render_analysis(self, analysis: Analysis, period: str, report: KpiReport | None = None):
         self.animator.stop(self.canvas)
         self.animator.stop(self.history_canvas)
-        self.dashboard_title.setText(KPI_TITLES[analysis.kpi])
+        self.dashboard_title.setText(KPI_TITLES[analysis.kpi].split(" – ", 1)[-1])
         self.description.setText(KPI_DESCRIPTIONS[analysis.kpi])
         self.period.setText(period)
         if report:
