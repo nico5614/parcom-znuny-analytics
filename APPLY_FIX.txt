@@ -1,0 +1,25 @@
+ParCom Znuny Analytics – Live-Verbindungsfix
+
+Geänderte Dateien:
+- parcom_analytics/znuny.py
+- tests/test_znuny.py
+- requirements.txt
+- requirements-lock.txt
+
+Änderungen:
+1. Windows-Zertifikatsspeicher via truststore bei weiterhin aktivierter TLS-Prüfung.
+2. TicketSearch: POST /Ticket/Search.
+3. TicketGet: GET /Ticket/:TicketID einzeln pro Ticket-ID.
+4. Tests an die real getesteten GenericInterface-Routen angepasst.
+
+Anwendung:
+1. Projekt sichern oder Git-Status prüfen.
+2. Inhalt dieser ZIP über den Projektordner kopieren und vorhandene Dateien ersetzen.
+3. Abhängigkeiten aktualisieren:
+   .\.venv314\Scripts\python.exe -m pip install -r requirements-lock.txt
+4. Tests:
+   .\.venv314\Scripts\python.exe -m pytest -q -o cache_dir=.validation/cache
+5. Source-Test:
+   .\.venv314\Scripts\python.exe start.py
+
+Noch keinen Installer bauen, bevor Login + Live-Refresh erfolgreich getestet wurden.
