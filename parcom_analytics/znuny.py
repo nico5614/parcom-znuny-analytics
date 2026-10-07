@@ -2,6 +2,10 @@
 
 import logging
 import re
+from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
+from copy import deepcopy
+from queue import LifoQueue
+from threading import Event, RLock
 from urllib.parse import quote
 
 import truststore
@@ -11,6 +15,8 @@ import truststore
 truststore.inject_into_ssl()
 
 import requests
+
+from .performance import Timings
 
 BASE_URL = "https://znuny.parcom.ch/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST"
 DEFAULT_QUEUES = ("PBX", "PBX Intern")
@@ -37,13 +43,33 @@ class SessionExpired(ZnunyError):
 
 
 class ZnunyClient:
-    def __init__(self, transport=None):
-        self._http = transport or requests.Session()
-        self._http.trust_env = False
+    def __init__(self, transport=None, concurrency=4):
+        if type(concurrency) is not int or not 1 <= concurrency <= 6:
+            raise ValueError("Concurrency must be between 1 and 6")
+        self.concurrency = concurrency
+        self._lock = RLock()
+        self._generation = 0
+        self._inflight = {}
+        self.timings = Timings()
+        # A requests.Session has mutable cookies. Lease each persistent session
+        # exclusively; never share one Session concurrently across worker threads.
+        self._sessions = LifoQueue(maxsize=concurrency)
+        for _ in range(concurrency):
+            http = transport if transport is not None else requests.Session()
+            http.trust_env = False
+            if transport is None:
+                http.mount("https://", requests.adapters.HTTPAdapter(
+                    pool_connections=1, pool_maxsize=1, pool_block=True, max_retries=0))
+            self._sessions.put(http)
+        self._http = http
         self._session_id = None
         self.connected = False
 
     def _request(self, operation, suffix="", data=None, timeout=(5, 30)):
+        with self.timings.measure(operation):
+            return self._perform_request(operation, suffix, data, timeout)
+
+    def _perform_request(self, operation, suffix, data, timeout):
         # Routes are intentionally closed: there is no generic write-ticket API.
         method, path = {"SessionCreate": ("POST", "/Session"),
                         "SessionDelete": ("DELETE", "/Session/" + suffix),
@@ -52,10 +78,22 @@ class ZnunyClient:
                         "TicketHistoryGet": ("GET", "/Ticket/History/" + suffix),
                         "TicketGet": ("GET", "/Ticket/" + suffix)}[operation]
         LOGGER.info("Znuny operation: %s", operation)
+        with self._lock:
+            generation = self._generation
         try:
             request_data = {"params": data} if method == "GET" else ({"json": data} if data is not None else {})
-            response = self._http.request(method, BASE_URL + path, **request_data,
-                                          timeout=timeout, verify=True, allow_redirects=False)
+            http = self._sessions.get()
+            try:
+                with self._lock:
+                    if operation.startswith("Ticket") and (generation != self._generation or not self._session_id):
+                        raise SessionExpired("Die Znuny-Sitzung ist abgelaufen. Bitte erneut anmelden.")
+                response = http.request(method, BASE_URL + path, **request_data,
+                                        timeout=timeout, verify=True, allow_redirects=False)
+            finally:
+                self._sessions.put(http)
+            with self._lock:
+                if operation.startswith("Ticket") and generation != self._generation:
+                    raise SessionExpired("Die Znuny-Sitzung ist abgelaufen. Bitte erneut anmelden.")
             if response.status_code in (401, 403):
                 self._auth_error(operation)
             if not 200 <= response.status_code < 300:
@@ -79,7 +117,9 @@ class ZnunyClient:
             raise
 
     def _auth_error(self, operation):
-        self._session_id = None
+        with self._lock:
+            self._session_id = None
+            self._generation += 1
         if operation == "SessionCreate":
             raise LoginError("Anmeldung fehlgeschlagen. Benutzername oder Passwort prüfen.")
         raise SessionExpired("Die Znuny-Sitzung ist abgelaufen. Bitte erneut anmelden.")
@@ -105,8 +145,10 @@ class ZnunyClient:
         return {"SessionID": self._session_id}
 
     def logout(self):
-        session_id, self._session_id = self._session_id, None
-        self.connected = False
+        with self._lock:
+            session_id, self._session_id = self._session_id, None
+            self._generation += 1
+            self.connected = False
         try:
             if session_id:
                 self._request("SessionDelete", quote(session_id, safe=""), timeout=(1, 2))
@@ -131,27 +173,73 @@ class ZnunyClient:
     def get_ticket(self, ticket_id):
         return self.get_tickets([ticket_id])[0]
 
+    def _shared(self, operation, ticket_id, load, cancel=None):
+        with self._lock:
+            key = (self._generation, operation, ticket_id)
+            future = self._inflight.get(key)
+            owner = future is None
+            if owner:
+                future = self._inflight[key] = Future()
+        if owner:
+            try:
+                future.set_result(load())
+            except BaseException as error:
+                future.set_exception(error)
+            finally:
+                with self._lock:
+                    self._inflight.pop(key, None)
+        while True:
+            if cancel is not None and cancel.is_set():
+                raise ZnunyError("Laden abgebrochen.")
+            try:
+                # Consumers can safely annotate their own returned data.
+                return deepcopy(future.result(timeout=.05))
+            except TimeoutError:
+                continue
+
     def get_tickets(self, ticket_ids, cancel=None):
         ids = [str(value) for value in ticket_ids]
         if not ids or len(ids) > 50 or any(not re.fullmatch(r"\d+", value) for value in ids):
             raise ValueError("Invalid ticket ID")
-        tickets = []
-        for ticket_id in ids:
-            if cancel is not None and cancel.is_set():
+        stopped = Event()
+
+        def fetch(ticket_id):
+            if stopped.is_set() or (cancel is not None and cancel.is_set()):
                 raise ZnunyError("Laden abgebrochen.")
-            payload = self._request("TicketGet", ticket_id, data={**self._auth(), "Extended": 1,
-                                    "AllArticles": 0, "Attachments": 0, "DynamicFields": 0})
-            item = payload.get("Ticket")
-            if isinstance(item, list):
-                item = item[0] if len(item) == 1 else None
-            if not isinstance(item, dict) or str(item.get("TicketID")) != ticket_id:
-                raise ZnunyError("Die Ticketantwort von Znuny ist ungültig.")
-            tickets.append(item)
-        return tickets
+            try:
+                return self._shared("TicketGet", ticket_id, lambda: self._get_ticket(ticket_id), cancel)
+            except BaseException:
+                stopped.set()
+                raise
+
+        unique = list(dict.fromkeys(ids))
+        if len(unique) == 1:
+            items = [fetch(unique[0])]
+        else:
+            with ThreadPoolExecutor(max_workers=self.concurrency, thread_name_prefix="znuny") as pool:
+                # At most one small batch is queued; map preserves input order.
+                items = list(pool.map(fetch, unique, buffersize=self.concurrency))
+        if cancel is not None and cancel.is_set():
+            raise ZnunyError("Laden abgebrochen.")
+        tickets = dict(zip(unique, items))
+        return [deepcopy(tickets[ticket_id]) for ticket_id in ids]
+
+    def _get_ticket(self, ticket_id):
+        payload = self._request("TicketGet", ticket_id, data={**self._auth(), "Extended": 1,
+                                "AllArticles": 0, "Attachments": 0, "DynamicFields": 0})
+        item = payload.get("Ticket")
+        if isinstance(item, list):
+            item = item[0] if len(item) == 1 else None
+        if not isinstance(item, dict) or str(item.get("TicketID")) != ticket_id:
+            raise ZnunyError("Die Ticketantwort von Znuny ist ungültig.")
+        return item
 
     def get_history(self, ticket_id):
         if not re.fullmatch(r"\d+", str(ticket_id)):
             raise ValueError("Invalid ticket ID")
+        return self._shared("TicketHistoryGet", str(ticket_id), lambda: self._get_history(ticket_id))
+
+    def _get_history(self, ticket_id):
         payload = self._request("TicketHistoryGet", str(ticket_id), data=self._auth())
         items = payload.get("TicketHistory")
         if isinstance(items, dict):
