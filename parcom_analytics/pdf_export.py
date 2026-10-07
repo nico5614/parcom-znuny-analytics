@@ -67,7 +67,8 @@ def document_header(title: str, period: str = "") -> str:
 def export_pdf(path: Path, analysis: Analysis, period: str, figure: Figure, report: KpiReport | None = None) -> None:
     document = QTextDocument()
     document.setDefaultFont(QFont("Segoe UI", 9))
-    body = document_header(KPI_TITLES[analysis.kpi], period)
+    title = KPI_TITLES[analysis.kpi].split(" – ",1)[-1]
+    body = document_header(title, period)
     if report:
         stamp = datetime.fromisoformat(report.record.export_timestamp).strftime("%d.%m.%Y – %H:%M Uhr")
         body += f'<p>Datenquelle: {escape(report.source)} · Datenstand: {stamp} ({escape(report.record.timezone)})</p>'
@@ -82,16 +83,28 @@ def export_pdf(path: Path, analysis: Analysis, period: str, figure: Figure, repo
         body += table_html(comparison_rows(report))
     page_break = ' style="page-break-before:always"' if report else ''
     body += f'<h2{page_break}>{escape(analysis.table_title)} · {len(analysis.details)} Tickets</h2>'
-    body += f'<p>{escape(analysis.highlight_note)}</p>' + table_html(analysis.details, analysis)
+    body += f'<p>{escape(analysis.highlight_note)}</p>'
+    if len(analysis.details.columns) > 9:
+        # Repeat the ticket identifier across column groups instead of clipping a wide table.
+        base = [column for column in ("Ticket#", "Titel") if column in analysis.details]
+        rest = [column for column in analysis.details if column not in base]
+        for start in range(0,len(rest),5):
+            if start:
+                body += '<h2 style="page-break-before:always">Ticketdetails · weitere Angaben</h2>'
+            body += table_html(analysis.details[base+rest[start:start+5]],analysis)
+    else:
+        body += table_html(analysis.details, analysis)
     document.setHtml(body)
-    write_document(path, KPI_TITLES[analysis.kpi], document)
+    write_document(path, title, document)
 
 
 def export_management_pdf(path: Path, report: ManagementReport) -> None:
     document = QTextDocument()
     document.setDefaultFont(QFont("Segoe UI", 9))
     title = "Service Desk – Gesamtübersicht"
-    body = document_header(title, "Aktuellste verfügbare KPI-Daten · aggregierter Management-Bericht")
+    body = document_header(title, period_label(report.kpis[1].record))
+    stamp = max(item.record.export_timestamp for item in report.kpis.values())
+    body += f'<p>Datenquelle: {escape(report.kpis[1].source)} · Datenstand: {datetime.fromisoformat(stamp):%d.%m.%Y %H:%M} · Europe/Zurich</p>'
     performance, score = report.performance, report.performance.current
     if score:
         status, color = score_status(score.value)
@@ -99,7 +112,7 @@ def export_management_pdf(path: Path, report: ManagementReport) -> None:
     else:
         body += f'<h2>Performance Score noch nicht verfügbar</h2><p>{HISTORY_MESSAGE}</p><p>{escape(performance.issue)}</p>'
     body += '<p>Basierend auf der Entwicklung der Service-KPIs. 100 % bedeutet keine Verschlechterung, keine SLA-Erfüllung. '
-    body += 'KPI 1/2 sind ausschliesslich Kontext. Positive Ticketdifferenz: mehr geschlossen als neu eingegangen.</p>'
+    body += 'Neue und geschlossene Tickets sind ausschliesslich Kontext. Positive Ticketdifferenz: mehr geschlossen als neu eingegangen.</p>'
     body += metrics_html(list(report.metrics.items()), 3)
     for kpi, item in report.kpis.items():
         if item.analysis.references.get("invalid_values"):
@@ -109,7 +122,7 @@ def export_management_pdf(path: Path, report: ManagementReport) -> None:
     draw_management(summary, report)
     body += add_chart(document, summary, "management", 480)
     body += '<h2 style="page-break-before:always">Datenbasis und Performance</h2>'
-    sources = [[f"KPI {kpi}", period_label(item.record), datetime.fromisoformat(item.record.export_timestamp).strftime("%d.%m.%Y %H:%M"), item.record.timezone, item.source]
+    sources = [[KPI_TITLES[kpi].split(" – ",1)[-1], period_label(item.record), datetime.fromisoformat(item.record.export_timestamp).strftime("%d.%m.%Y %H:%M"), item.record.timezone, item.source]
                for kpi, item in report.kpis.items()]
     body += table_html(pd.DataFrame(sources, columns=["KPI", "Berichtszeitraum / Datenstand", "Exportzeitpunkt", "Zeitzone", "Datenquelle"]))
     body += '<p>Monats-KPIs und Snapshots können unterschiedliche Zeitbezüge haben. Abschlussverhältnis und Ticketdifferenz werden nur für denselben Berichtsmonat berechnet.</p>'
@@ -125,10 +138,10 @@ def export_management_pdf(path: Path, report: ManagementReport) -> None:
         body += 'Eskalationen: Quote; Zeiten: Median. Gesamtscore: Mittel der fünf Bereiche. Verbesserungen sind bei 100 % gedeckelt.</p>'
     for position, (kpi, item) in enumerate(report.kpis.items()):
         page_break = ' style="page-break-before:always"' if position % 2 == 0 else ''
-        body += f'<h2{page_break}>{escape(KPI_TITLES[kpi])} · Verlauf</h2>'
+        body += f'<h2{page_break}>{escape(KPI_TITLES[kpi].split(" – ",1)[-1])} · Verlauf</h2>'
         figure = Figure(figsize=(10, 1.8), dpi=100)
         draw_history(figure, item)
-        body += add_chart(document, figure, f"history-{kpi}", 165)
+        body += add_chart(document, figure, f"history-{kpi}", 125)
         body += f'<p>{escape(comparison_label(item))}</p>' + table_html(comparison_rows(item))
         if item.history_note:
             body += f'<p>{escape(item.history_note)}</p>'

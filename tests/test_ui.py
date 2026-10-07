@@ -76,7 +76,7 @@ def test_complete_desktop_workflow(qapp, tmp_path, tickets, monkeypatch):
     document = QPdfDocument()
     assert document.load(str(pdf)) == QPdfDocument.Error.None_
     text = " ".join(document.getAllText(page).text() for page in range(document.pageCount()))
-    for expected in ["ParCom Znuny Analytics", "KPI 7", "DEMO-006", "Erstellt am", "29.09.2026"]:
+    for expected in ["ParCom Znuny Analytics", "Wartende Tickets", "DEMO-006", "Erstellt am", "29.09.2026"]:
         assert expected in text
     assert not document.render(0, QSize(1200, 850)).isNull()
     document.close()

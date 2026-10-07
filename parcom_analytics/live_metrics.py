@@ -57,13 +57,16 @@ def analyze_live(kpi, frame, period):
         result.row_highlights = ["critical"] * count
     indexes = result.details.index
     columns = ["Ticket#", "Titel", "Status", "Typ", "Queue", "Erstellt", "Zuletzt geändert", "Alter",
-               "OwnerID", "Sperre", "Timer", "Warten bis", "Kundennummer", "Erstantwortzeit in Minuten", "Lösungszeit in Minuten"]
+               "OwnerID", "Sperre", "Timer", "Warten bis", "Kundennummer", "FirstResponse",
+               "Erstantwortzeit in Minuten", "Lösungszeit in Minuten", "Aktuell eskaliert"]
     result.details = frame.loc[indexes].reindex(columns=columns).copy()
     from .agents import code
     result.details["OwnerID"] = result.details["OwnerID"].map(code)
     result.details.rename(columns={"OwnerID":"Besitzer"},inplace=True)
+    result.details["Aktuell eskaliert"] = result.details["Aktuell eskaliert"].map({1:"Ja",0:"Nein"}).fillna("Unbekannt")
+    result.details.rename(columns={"Aktuell eskaliert":"Eskalation", "FirstResponse":"Erste Antwort am"},inplace=True)
     result.details.attrs["ticket_ids"] = dict(zip(frame["Ticket#"].map(str),frame["TicketID"].map(str)))
-    for column in ("Erstellt", "Zuletzt geändert", "Warten bis"):
+    for column in ("Erstellt", "Zuletzt geändert", "Warten bis", "Erste Antwort am"):
         result.details[column] = result.details[column].map(lambda value: server_datetime(value).strftime("%d.%m.%Y %H:%M") if server_datetime(value) else "–")
     if kpi == 7:
         result.row_highlights = ["critical" if row["Timer"] == "Überfällig" and row["Sperre"] == "Gesperrt"

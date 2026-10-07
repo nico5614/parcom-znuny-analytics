@@ -272,6 +272,7 @@ class ServiceDeskPage(QScrollArea):
         layout.addLayout(self.top_grid)
 
         self.overview_tiles = {}
+        self.agent_selection = set()
 
         for column, name in enumerate(("Neue Tickets", "Geschlossene Tickets", "Abschlussverhältnis (geschlossen / neu)", "Offene Tickets"), 1):
 
@@ -335,6 +336,7 @@ class ServiceDeskPage(QScrollArea):
         layout.addWidget(self.management_card)
 
         self.operations = QGridLayout()
+        self.operation_cards = []
 
         self.operations.setSpacing(16)
 
@@ -343,11 +345,23 @@ class ServiceDeskPage(QScrollArea):
             card, value, note = self._tile(name)
 
             self.operations.addWidget(card, 0, column)
+            self.operation_cards.append(card)
 
             self.operations.setColumnStretch(column, 1)
 
             self.overview_tiles[name] = (value, note)
 
+        self.agent_card = Card()
+        self.operation_cards.append(self.agent_card)
+        agent_box = QVBoxLayout(self.agent_card)
+        agent_box.setContentsMargins(12, 12, 12, 12)
+        agent_box.addWidget(label("Abschlüsse · Team", "muted"))
+        self.agent_figure = Figure(figsize=(2.3, 1.1), dpi=100)
+        self.agent_canvas = FigureCanvasQTAgg(self.agent_figure)
+        self.agent_canvas.setMinimumSize(100, 100)
+        agent_box.addWidget(self.agent_canvas)
+        self.operations.addWidget(self.agent_card, 0, 4)
+        self.operations.setColumnStretch(4, 1)
         layout.addLayout(self.operations)
 
         self.action_note = label("Noch kein Datenstand geladen", "muted")
@@ -383,6 +397,7 @@ class ServiceDeskPage(QScrollArea):
         empty.addWidget(self.issue_label)
 
         self.top_grid.addWidget(self.empty_card, 0, 0)
+
 
         self.period_label = label("", "eyebrow")
 
@@ -550,6 +565,7 @@ class ServiceDeskPage(QScrollArea):
             self.action_note.setText("Bestand und Warte-Tickets beziehen sich auf den aktuellen Datenstand." +
                 (f"  · Aktive Timer: {management.metrics['Aktive Timer']} · Ohne Timer: {management.metrics['Ohne Timer']} · Timer unbekannt: {management.metrics['Timer unbekannt']} · Auto-Schliessen: {management.metrics['Automatisches Schliessen vorgemerkt']}" if 'Aktive Timer' in management.metrics else ""))
 
+            self._apply_live_context(management)
             self._draw_volume(management)
 
         except (DataError, OSError, ValueError, KeyError):
@@ -822,3 +838,45 @@ class ServiceDeskPage(QScrollArea):
         for index in range(5):
             self.top_grid.setColumnStretch(index, 1 if index < columns else 0)
         self.top_grid.addWidget(self.empty_card, 0, 0)
+        for index, card in enumerate(self.operation_cards):
+            self.operations.addWidget(card, index // columns, index % columns)
+        for index in range(5):
+            self.operations.setColumnStretch(index, 1 if index < columns else 0)
+
+    def _apply_live_context(self, management):
+        self.agent_figure.clear()
+        axis = self.agent_figure.add_subplot(111)
+        axis.set_axis_off()
+        if self.live_cache and self.live_cache.batch:
+            from .agents import metrics
+            rows = sorted(metrics(self.live_cache.batch, self.agent_selection), key=lambda row:(-row["Geschlossen"],row["Techniker"]))[:5]
+            if rows and any(row["Geschlossen"] for row in rows):
+                axis.set_axis_on()
+                bars=axis.barh([row["Techniker"] for row in rows],[row["Geschlossen"] for row in rows],color="#4C8DFF")
+                axis.invert_yaxis()
+                axis.bar_label(bars,padding=3,color="#A6B2BF",fontsize=8)
+                axis.set_xticks([])
+                axis.spines[["top","right","left","bottom"]].set_visible(False)
+                axis.margins(x=.3)
+            else:
+                axis.text(.5,.5,"Keine Abschlüsse",ha="center",va="center",transform=axis.transAxes,color="#A6B2BF",fontsize=9)
+            new_report, closed_report = management.kpis[1], management.kpis[2]
+            for name, item, lower in (("Neue Tickets",new_report,True),("Geschlossene Tickets",closed_report,False)):
+                if item.comparable and len(item.history)>1:
+                    current = next(iter(item.analysis.metrics.values()))
+                    previous = next(iter(item.history[-2].analysis.metrics.values()))
+                    delta = current-previous
+                    note = self.overview_tiles[name][1]
+                    note.setText(f"{'↑' if delta>0 else '↓' if delta<0 else '→'} {delta:+d} zum Vorzeitraum")
+                    note.setStyleSheet("color: " + ("#A6B2BF" if delta==0 or name=="Neue Tickets" else "#39E58C" if (delta<0)==lower else "#FF5C6C") + ";")
+            total = next(iter(new_report.analysis.metrics.values()))
+            closed = next(iter(closed_report.analysis.metrics.values()))
+            ratio_value, ratio_note = self.overview_tiles["Abschlussverhältnis (geschlossen / neu)"]
+            ratio_value.setText(f"{closed/total*100:.1f} %".replace(".",",") if total else "–")
+            ratio_note.setText("Keine neuen Tickets" if not total else "Geschlossen / neu")
+            ratio_note.setStyleSheet("color: " + ("#A6B2BF" if not total else "#39E58C" if closed>=total else "#FFB84D") + ";")
+        else:
+            axis.text(.5,.5,"Kein Live-Datenstand",ha="center",va="center",transform=axis.transAxes,color="#A6B2BF",fontsize=9)
+        self.agent_figure.subplots_adjust(left=.22,right=.95,top=.98,bottom=.05)
+        dark_figure(self.agent_figure)
+        self.agent_canvas.draw()

@@ -10,6 +10,7 @@ import pytest
 import requests
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFontDatabase
+from PySide6.QtCore import QCoreApplication, QEvent
 
 
 @pytest.fixture
@@ -51,3 +52,16 @@ def no_real_network(monkeypatch):
     def blocked(*args, **kwargs):
         raise AssertionError("Real network access is forbidden in tests")
     monkeypatch.setattr(requests.Session, "request", blocked)
+
+
+@pytest.fixture(autouse=True)
+def dispose_test_windows(request):
+    yield
+    if "qapp" in request.fixturenames:
+        app = QApplication.instance()
+        # Destroy native widgets on the GUI thread between tests, not in a later GC cycle.
+        for window in app.topLevelWidgets():
+            window.close()
+            window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        app.processEvents()

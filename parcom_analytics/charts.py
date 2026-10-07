@@ -127,8 +127,12 @@ def draw_history(figure: Figure, report: KpiReport) -> None:
     labels = []
     for index in ticks:
         record = report.history[index].record
-        labels.append(month_label(record.reporting_month).replace(" ", "\n") if record.reporting_month
-                      else datetime.fromisoformat(record.export_timestamp).strftime("%d.%m.%Y\n%H:%M"))
+        if getattr(record, "period_start", None):
+            start, end = datetime.fromisoformat(record.period_start), datetime.fromisoformat(record.period_end)
+            labels.append(f"{start:%d.%m.%Y}\n– {end:%d.%m.%Y}")
+        else:
+            labels.append(month_label(record.reporting_month).replace(" ", "\n") if record.reporting_month
+                          else datetime.fromisoformat(record.export_timestamp).strftime("%d.%m.%Y\n%H:%M"))
     axis.set_xticks(ticks, labels)
     axis.set_xlim(-0.35, max(0.35, count-0.65))
     unit = next(iter(metrics.values()))[1]
@@ -184,7 +188,9 @@ def draw_management(figure: Figure, report) -> None:
          [kpis[1].analysis.metrics["Anzahl neue Tickets"], kpis[2].analysis.metrics["Anzahl geschlossene Tickets"]], "count"),
         ("Aktueller Bestand", ["Offen (inkl. wartend)", "Wartend"],
          [kpis[3].analysis.metrics["Aktuell offene Tickets"], kpis[7].analysis.metrics["Anzahl wartende Tickets"]], "count"),
-        ("Eskalationsquote", ["Erstantwort eskaliert"], [kpis[4].analysis.references["escalation_rate"]], "percent"),
+        ("Eskalationsquote", ["Aktuell eskaliert" if "Davon aktuell eskaliert" in kpis[4].analysis.metrics
+                              else "Erstantwort eskaliert"],
+         [kpis[4].analysis.references["escalation_rate"]], "percent"),
         ("Servicezeiten · Median", ["Reaktion", "Lösung"],
          [kpis[5].analysis.references["median"], kpis[6].analysis.references["median"]], "minutes"),
     ]

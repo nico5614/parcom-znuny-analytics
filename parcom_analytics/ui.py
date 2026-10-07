@@ -226,6 +226,8 @@ class MainWindow(QMainWindow):
             outer.addWidget(label(self.store.warning, "warning"))
         self.stack = QStackedWidget()
         outer.addWidget(self.stack, 1)
+        from .loading import LoadingOverlay
+        self.loading_overlay = LoadingOverlay(self.stack)
         self._build_start()
         self._build_upload()
         self._build_dashboard()
@@ -242,6 +244,8 @@ class MainWindow(QMainWindow):
         self.connection_status = label("", "muted", False)
         footer.addWidget(self.connection_status)
         footer.addStretch()
+        self.data_stamp = label("", "muted", False)
+        footer.addWidget(self.data_stamp)
         footer.addWidget(label(f"Version {DISPLAY_VERSION}", "muted", False))
         outer.addLayout(footer)
         self.refresh_dashboard()
@@ -255,7 +259,12 @@ class MainWindow(QMainWindow):
         self.connection.loaded.connect(self._live_loaded)
         self.connection.failed.connect(self._network_error)
         self.connection.busyChanged.connect(self._network_busy)
-
+        self.connection.changesDetected.connect(self._changes_detected)
+        self.change_timer = QTimer(self)
+        self.change_timer.setInterval(120000)
+        self.change_timer.timeout.connect(self.connection.check_changes)
+        self.change_timer.start()
+        self._update_data_stamp()
         self._connection_state("offline")
 
     @property
@@ -303,6 +312,16 @@ class MainWindow(QMainWindow):
         self.network_note = label(self.live_cache.warning, "warning")
         self.network_note.setVisible(bool(self.live_cache.warning))
         outer.addWidget(self.network_note)
+        self.change_banner = QFrame()
+        self.change_banner.setObjectName("card")
+        banner = QHBoxLayout(self.change_banner)
+        banner.addWidget(label("Neuer Datenstand verfügbar", "eyebrow"))
+        banner.addStretch()
+        changed_refresh = QPushButton("Aktualisieren")
+        changed_refresh.clicked.connect(self.refresh_live)
+        banner.addWidget(changed_refresh)
+        self.change_banner.hide()
+        outer.addWidget(self.change_banner)
         self.source_combo.currentIndexChanged.connect(self._source_changed)
 
     def _build_login(self, shell, required):
@@ -373,6 +392,7 @@ class MainWindow(QMainWindow):
             self.logout()
             return
         self.gate.setCurrentIndex(0)
+        self._show_cached_period()
         self.navigate(3)
 
     def login(self):
@@ -395,6 +415,9 @@ class MainWindow(QMainWindow):
         self.gate.setCurrentIndex(0)
         self.animator.fade(self.gate.currentWidget())
         self.source_combo.setCurrentIndex(1)
+        self.timeline.track.mode, self.timeline.track.key = "normal", "1W"
+        self.timeline.track.update()
+        self.timeline.sync_controls()
         self.navigate(3)
         self.refresh_after_login = True
 
@@ -411,7 +434,8 @@ class MainWindow(QMainWindow):
         self.connect_button.setText("Neu verbinden" if state == "online" else "Verbinden")
 
     def _network_busy(self, busy):
-        self.loading.setVisible(busy)
+        self.loading_overlay.set_loading(busy and self.gate.currentIndex() == 0)
+        self.timeline.setEnabled(not busy)
         self.login_button.setEnabled(not busy)
         self.login_button.setText("Anmeldung läuft …" if busy and self.gate.currentIndex() == 1 else "Anmelden")
         self.offline_button.setEnabled(not busy)
@@ -429,6 +453,25 @@ class MainWindow(QMainWindow):
         self.login_error.show()
         self.network_note.setText(message + " Der letzte lokale Datenstand bleibt verfügbar.")
         self.network_note.show()
+        self._show_cached_period()
+
+    def _changes_detected(self, changed):
+        if changed:
+            self.change_banner.show()
+
+    def _update_data_stamp(self):
+        batch = self.live_cache.batch
+        self.data_stamp.setText("Datenstand: " + datetime.fromisoformat(batch.captured_at).strftime("%d.%m.%Y %H:%M")
+                                if batch else "Noch kein Datenstand geladen")
+
+    def _show_cached_period(self):
+        from .periods import TimeRange
+        batch = self.live_cache.batch
+        if batch and isinstance(batch.period, TimeRange):
+            self.timeline.track.custom = batch.period
+            self.timeline.track.mode = "custom"
+            self.timeline.track.update()
+            self.timeline.sync_controls()
 
     def _range_changed(self):
         custom = self.is_live and self.range_combo.currentData() == "custom"
@@ -445,7 +488,12 @@ class MainWindow(QMainWindow):
         self.service_desk.refresh()
 
     def refresh_live(self):
-        if self.connection.worker or self.connection.state != "online":
+        if self.connection.state != "online":
+            self._show_cached_period()
+            self.network_note.setText("Offline: Der zuletzt geladene Zeitraum bleibt sichtbar. Zum Laden eines anderen Zeitraums mit Znuny verbinden.")
+            self.network_note.show()
+            return
+        if self.connection.worker and self.connection.worker.operation != "check":
             return
         try:
             period = self.timeline.period()
@@ -458,6 +506,8 @@ class MainWindow(QMainWindow):
 
     def _live_loaded(self, reports):
         self.live_reports = reports
+        self.change_banner.hide()
+        self._update_data_stamp()
         self.agent_page.refresh()
         self.kpi_changed()
         self.refresh_download_choices()
@@ -474,6 +524,7 @@ class MainWindow(QMainWindow):
             if self.offline_after_logout:
                 self.offline_after_logout = False
                 self.gate.setCurrentIndex(0)
+                self._show_cached_period()
                 self.navigate(3)
             else:
                 self.show_login()
@@ -505,8 +556,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(label(APP_NAME, "title"))
         layout.addWidget(label("Auswertung und Visualisierung von Service-KPIs aus Znuny.", "muted"))
         sections = [
-            ("Über die Anwendung", "Analytics- und Reporting-Anwendung für Znuny. Live-Kennzahlen und lokale Excel-Daten für den Service Desk."),
-            ("So funktioniert es", "1. Mit Znuny verbinden oder offline fortfahren.\n2. Datenquelle, KPI und Zeitraum auswählen.\n3. Unter «Berichte» die gewünschte Auswertung als PDF exportieren."),
+            ("Über die Anwendung", "Analytics- und Reporting-Anwendung für Znuny. Live-Kennzahlen, Trends und Agentenauswertungen für den Service Desk."),
+            ("So funktioniert es", "1. Mit Znuny verbinden oder den letzten Datenstand öffnen.\n2. Übersicht, Analyse oder Agenten und Zeitraum auswählen.\n3. Unter «Export» die Auswertung als PDF speichern."),
             ("Datenschutz", "Daten werden lokal ausgewertet. Nur die Anmeldung und lesende Datenabfragen kommunizieren per HTTPS mit Znuny. Passwort und Sitzung werden nicht gespeichert."),
             ("Entwicklung", f"Entwickelt von {PUBLISHER}\nfür ParCom Systems AG\n\nHerausgeber: {PUBLISHER}"),
         ]
@@ -721,7 +772,7 @@ class MainWindow(QMainWindow):
         layout = self._compact_page()
         layout.addWidget(label("PDF-BERICHT", "eyebrow"))
         layout.addWidget(label("Auswertung exportieren", "title"))
-        layout.addWidget(label("Erstellen Sie einen PDF-Bericht aus den importierten Znuny-Daten.", "muted"))
+        layout.addWidget(label("Erstellen Sie einen PDF-Bericht aus dem angezeigten Znuny-Datenstand. Den Zeitraum wählen Sie oben in der Timeline.", "muted"))
         layout.addWidget(label("Auswertung", "section"))
         self.download_combo = QComboBox()
         self.download_combo.setAccessibleName("Auswertung für PDF auswählen")
@@ -749,6 +800,7 @@ class MainWindow(QMainWindow):
     def navigate(self, index: int):
         self.stack.setCurrentIndex(index)
         if index == 3:
+            self.service_desk.agent_selection = self.agent_page.selected
             self.service_desk.refresh()
         elif index == 4:
             self.refresh_download_choices()
@@ -1016,6 +1068,8 @@ class MainWindow(QMainWindow):
         self.download_period_label.setVisible(kpi is not None)
         self.download_period_combo.setVisible(isinstance(kpi, int))
         self.download_basis.setVisible(kpi == "service_desk")
+        if self.is_live and self.live_cache.batch:
+            self.download_basis.setText(self.live_cache.batch.period.label + " · Znuny Live")
         self._refresh_download()
 
     def _refresh_download(self):
@@ -1027,8 +1081,8 @@ class MainWindow(QMainWindow):
                 if kpi == "service_desk":
                     self.download_report = self.live_cache.management()
                 elif isinstance(kpi, int):
-                    self.download_report = self.live_reports.get(kpi)
-                note = "Znuny-Datenstand · Bericht mit Kennzahlen, Diagrammen und Historie." if self.download_report else "Keine lokalen Znuny-Daten verfügbar."
+                    self.download_report = self.selected_live_report(kpi) if kpi in self.live_reports else None
+                note = "Znuny-Datenstand · Bericht mit Kennzahlen, Diagrammen und Historie." if self.download_report else "Noch kein Datenstand geladen"
             elif not self.store.records:
                 note = "Keine Auswertungen verfügbar.\nImportieren Sie zuerst Znuny-Excel-Dateien unter «Import»."
             elif kpi == "service_desk":
@@ -1088,4 +1142,5 @@ class MainWindow(QMainWindow):
                 self.network_note.show()
         else:
             self.animator.finish_all()
+            self.change_timer.stop()
             event.accept()

@@ -68,6 +68,7 @@ class LiveBatch:
     agents: list[dict] = field(default_factory=list)
     note: str = ""
     identities: list[dict] = field(default_factory=list)
+    load_started_at: str = ""
 
 
 def normalize_tickets(tickets: list[dict], captured=None) -> pd.DataFrame:
@@ -143,6 +144,7 @@ def fetch_live(client, period: DateRange, cancel: Event, progress=lambda value: 
 
 
 def fetch_period(client, period, cancel, progress):
+    started_at = datetime.now(ZURICH).isoformat(timespec="seconds")
     def search(filters):
         if cancel.is_set():
             raise ZnunyError("Laden abgebrochen.")
@@ -255,4 +257,4 @@ def fetch_period(client, period, cancel, progress):
     return LiveBatch(period, datetime.now(ZURICH).isoformat(timespec="seconds"),
                      {1:new, 2:closed, 3:opened, 4:opened.copy(), 5:closed.copy(), 6:closed.copy(), 7:waiting},
                      {1:old_new, 2:old_closed, 5:old_closed.copy(), 6:old_closed.copy()},
-                     activity, identities=list(identities.values()))
+                     activity, identities=list(identities.values()), load_started_at=started_at)

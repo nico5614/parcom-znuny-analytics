@@ -1,6 +1,7 @@
 """Qt background jobs for login, read-only refresh and best-effort logout."""
 
 import logging
+from datetime import datetime, timedelta, timezone
 from threading import Event
 
 from PySide6.QtCore import QObject, QThread, Signal
@@ -36,6 +37,10 @@ class NetworkWorker(QThread):
                 if self.cache:
                     self.cache.update(result)
                     result = self.cache.reports()
+            elif self.operation == "check":
+                stamp = datetime.fromisoformat(argument).astimezone(timezone.utc)-timedelta(seconds=1)
+                result = bool(self.client.search_tickets({"TicketLastChangeTimeNewerDate":stamp.strftime("%Y-%m-%d %H:%M:%S"),
+                                                         "SearchInArchive":"AllTickets"},limit=1))
             else:
                 self.client.logout()
                 result = None
@@ -60,6 +65,7 @@ class ConnectionController(QObject):
     failed = Signal(str)
     busyChanged = Signal(bool)
     progress = Signal(int)
+    changesDetected = Signal(bool)
 
     def __init__(self, parent=None, client=None, cache=None):
         super().__init__(parent)
@@ -68,6 +74,7 @@ class ConnectionController(QObject):
         self.worker = None
         self.state = "offline"
         self._logout_pending = False
+        self._refresh_pending = None
 
     def _set_state(self, state):
         self.state = state
@@ -81,17 +88,27 @@ class ConnectionController(QObject):
         self.worker.failed.connect(self._failure)
         self.worker.progress.connect(self.progress)
         self.worker.finished.connect(self._finished)
-        self._set_state("connecting" if operation != "logout" else "offline")
-        self.busyChanged.emit(True)
+        if operation != "check":
+            self._set_state("connecting" if operation != "logout" else "offline")
+            self.busyChanged.emit(True)
         self.worker.start()
 
     def login(self, username, password):
         self._start("login", (username, password))
 
     def refresh(self, period):
+        if self.worker and self.worker.operation == "check":
+            self._refresh_pending = period
+            return
         self._start("refresh", period)
 
+    def check_changes(self):
+        if self.state == "online" and self.worker is None and self.cache and self.cache.batch:
+            batch = self.cache.batch
+            self._start("check", batch.load_started_at or batch.captured_at)
+
     def logout(self):
+        self._refresh_pending = None
         self._set_state("offline")
         if self.worker:
             self._logout_pending = True
@@ -105,6 +122,8 @@ class ConnectionController(QObject):
         if self.worker.operation == "logout":
             self._set_state("offline")
             self.loggedOut.emit()
+        elif self.worker.operation == "check":
+            self.changesDetected.emit(result)
         else:
             self._set_state("online")
             if self.worker.operation == "login":
@@ -113,6 +132,7 @@ class ConnectionController(QObject):
                 self.loaded.emit(result)
 
     def _failure(self, message):
+        self._refresh_pending = None
         self._set_state("offline")
         if not self._logout_pending:
             self.failed.emit(message)
@@ -120,7 +140,11 @@ class ConnectionController(QObject):
     def _finished(self):
         worker, self.worker = self.worker, None
         worker.deleteLater()
-        self.busyChanged.emit(False)
+        if worker.operation != "check":
+            self.busyChanged.emit(False)
         if self._logout_pending:
             self._logout_pending = False
             self._start("logout")
+        elif self._refresh_pending is not None and self.state == "online":
+            period, self._refresh_pending = self._refresh_pending, None
+            self._start("refresh",period)

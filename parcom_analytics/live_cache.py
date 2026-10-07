@@ -91,7 +91,7 @@ class LiveCache:
                 if set(frames) != set(range(1, 8)):
                     raise ValueError("Incomplete cache")
                 previous = {int(kpi): pd.DataFrame(rows, columns=NORMALIZED_COLUMNS, dtype=object) for kpi,rows in current.get("previous", {}).items()}
-                self.batch = LiveBatch(period, current["captured_at"], frames, previous, current.get("agents", []), current.get("note", ""), current.get("identities", []))
+                self.batch = LiveBatch(period, current["captured_at"], frames, previous, current.get("agents", []), current.get("note", ""), current.get("identities", []), current.get("load_started_at", ""))
                 self.history, self.periods = payload["history"], payload["periods"]
                 self.reports()
             except (ValueError, KeyError, TypeError, OSError):
@@ -106,7 +106,9 @@ class LiveCache:
         for kpi in (3, 4, 7):
             key = f"{kpi}:{batch.captured_at}"
             record = LiveRecord(kpi, batch.captured_at, TIMEZONE, None, key)
-            history[key] = {"record": asdict(record), "analysis": aggregate(analyses[kpi])}
+            snapshot = analyze_live(kpi, batch.frames[kpi], batch.period) if isinstance(batch.period, TimeRange) else analyses[kpi]
+            history[key] = {"record": asdict(record), "analysis": aggregate(snapshot),
+                            "escalation_source":"server" if isinstance(batch.period,TimeRange) else "first_response"}
         monthly = {}
         for month in pd.period_range(batch.period.start.date() if isinstance(batch.period.start, datetime) else batch.period.start, batch.period.end.date() if isinstance(batch.period.end, datetime) else batch.period.end, freq="M").astype(str):
             frames = monthly_frames(batch, month)
@@ -135,7 +137,8 @@ class LiveCache:
         payload = clean_json({"current": {"start": batch.period.start.isoformat(), "end": batch.period.end.isoformat(),
                                           "captured_at": batch.captured_at, "frames": safe_frames,
                                           "previous": {kpi: frame.reindex(columns=NORMALIZED_COLUMNS).astype(object).where(pd.notna(frame), None).to_dict("records") for kpi, frame in batch.previous.items()},
-                                          "agents": batch.agents, "note": batch.note, "identities":batch.identities},
+                                          "agents": batch.agents, "note": batch.note, "identities":batch.identities,
+                                          "load_started_at":batch.load_started_at},
                               "history": history, "periods": periods})
         temporary = self.path.with_suffix(".json.tmp")
         try:
@@ -166,6 +169,7 @@ class LiveCache:
                                 batch.period.end.isoformat() if monthly else None)
             history = [HistoryPoint(LiveRecord(**item["record"]), restore_analysis(item["analysis"]))
                        for item in self.history.values() if item["record"]["kpi_number"] == kpi
+                       and (kpi != 4 or not isinstance(batch.period,TimeRange) or item.get("escalation_source") == "server")
                        and (not monthly or item["record"]["reporting_month"] <= batch.period.end.strftime("%Y-%m"))]
             history.sort(key=lambda item: item.record.reporting_month or item.record.export_timestamp)
             note = "Monatsverlauf: ausschliesslich vollständig geladene Kalendermonate." if monthly else "Verlauf ausschliesslich tatsächlich aufgenommener Snapshots."
