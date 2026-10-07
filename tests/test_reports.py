@@ -16,6 +16,7 @@ from parcom_analytics.reports import (available_records, comparison_rows, defaul
                                       load_management_report, load_report)
 from parcom_analytics.storage import LocalStore, period_label
 from parcom_analytics.ui import MainWindow
+from parcom_analytics.theme import DARK_ROW_COLORS
 
 
 @pytest.fixture
@@ -42,6 +43,18 @@ def pdf_text(path):
     text = " ".join(document.getAllText(index).text() for index in range(document.pageCount()))
     document.close()
     return re.sub(r"\s+", "", text)
+
+
+def test_latest_corrected_snapshot_remains_selectable(tmp_path, tickets):
+    store = LocalStore(tmp_path / "store")
+    source = tmp_path / filename(3)
+    tickets.to_excel(source, index=False)
+    store.import_file(source)
+    tickets.iloc[:2].to_excel(source, index=False)
+    store.import_file(source)
+    latest = store.latest(3)
+    assert latest == available_records(store, 3)[0]
+    assert load_report(store, latest).analysis.metrics["Aktuell offene Tickets"] == 2
 
 
 @pytest.mark.parametrize("value,expected", [(0, "0 min"), (45, "45 min"), (60, "1 h"), (83, "1 h 23 min"),
@@ -191,7 +204,7 @@ def test_direct_download_selection_restart_and_clipboard(qapp, report_store, tmp
     qapp.processEvents()
     assert window.current_report.record.export_timestamp.startswith("2026-09")
     model = window.detail_table.model()
-    assert model.data(model.index(0, 0), Qt.ItemDataRole.BackgroundRole).name() == ROW_COLORS["critical"]
+    assert model.data(model.index(0, 0), Qt.ItemDataRole.BackgroundRole).name() == DARK_ROW_COLORS["critical"]
     QTest.mouseClick(window.detail_table.viewport(), Qt.MouseButton.LeftButton,
                      pos=window.detail_table.visualRect(model.index(0, 0)).center())
     assert QApplication.clipboard().text() == "DEMO-006"

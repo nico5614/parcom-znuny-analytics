@@ -1,0 +1,185 @@
+"""Minimal last-run ticket cache and aggregate-only historical observations."""
+
+from dataclasses import asdict, dataclass
+from datetime import date, datetime
+import json
+import logging
+import math
+import os
+from pathlib import Path
+
+import pandas as pd
+
+from .analytics import Analysis, DataError, analyze, date_values
+from .live_data import DateRange, LiveBatch, NORMALIZED_COLUMNS, TIMEZONE
+from .reports import HistoryPoint, KpiReport, management_report
+from .service_desk import Period, compare_periods, fill_period
+from .storage import FileMetadata, MONTHLY_KPIS, reporting_month
+
+LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class LiveRecord(FileMetadata):
+    stored_path: str = ""
+    period_start: str | None = None
+    period_end: str | None = None
+
+
+def clean_json(value):
+    if isinstance(value, dict):
+        return {str(key): clean_json(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [clean_json(item) for item in value]
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
+
+
+def aggregate(analysis):
+    return clean_json({"kpi": analysis.kpi, "metrics": analysis.metrics, "references": analysis.references,
+                       "chart": analysis.chart.to_dict() if analysis.chart_kind != "histogram" else {},
+                       "chart_title": analysis.chart_title, "chart_kind": analysis.chart_kind,
+                       "table_title": analysis.table_title, "note": analysis.note})
+
+
+def restore_analysis(item):
+    return Analysis(item["kpi"], item["metrics"], pd.Series(item["chart"], dtype=float),
+                    item["chart_title"], item["chart_kind"], pd.DataFrame(), item["table_title"], item["note"],
+                    {key: float("nan") if value is None else value for key, value in item["references"].items()})
+
+
+def monthly_frames(batch, month):
+    start = date.fromisoformat(month + "-01")
+    end = (pd.Timestamp(start) + pd.offsets.MonthEnd()).date()
+    if batch.period.start > start or batch.period.end < end:
+        return None
+    frames = {}
+    for kpi in MONTHLY_KPIS:
+        frame = batch.frames[kpi]
+        field = "Erstellt" if kpi == 1 else "Schließzeit"
+        dates = date_values(frame[field])
+        if dates.isna().any():
+            raise DataError("Znuny liefert Tickets ohne gültiges Erstellungs- oder Schliessdatum.")
+        frames[kpi] = frame.loc[dates.dt.strftime("%Y-%m") == month].reset_index(drop=True)
+    return frames
+
+
+class LiveCache:
+    def __init__(self, root: Path):
+        self.path = root / "live-cache.json"
+        self.batch = None
+        self.history = {}
+        self.periods = {}
+        self.warning = ""
+        self._reports = None
+        if self.path.exists():
+            try:
+                payload = json.loads(self.path.read_text(encoding="utf-8"))
+                current = payload["current"]
+                period = DateRange(date.fromisoformat(current["start"]), date.fromisoformat(current["end"]))
+                datetime.fromisoformat(current["captured_at"])
+                frames = {int(kpi): pd.DataFrame(rows, columns=NORMALIZED_COLUMNS, dtype=object)
+                          for kpi, rows in current["frames"].items()}
+                if set(frames) != set(range(1, 8)):
+                    raise ValueError("Incomplete cache")
+                self.batch = LiveBatch(period, current["captured_at"], frames)
+                self.history, self.periods = payload["history"], payload["periods"]
+                self.reports()
+            except (ValueError, KeyError, TypeError, OSError):
+                self.batch, self.history, self.periods = None, {}, {}
+                self.warning = "Der letzte Znuny-Datenstand konnte nicht gelesen werden. Excel-Daten bleiben verfügbar."
+                LOGGER.warning("Live cache could not be read")
+
+    def update(self, batch: LiveBatch):
+        # Fully prepare and validate before replacing the previous offline fallback.
+        analyses = {kpi: analyze(kpi, frame) for kpi, frame in batch.frames.items()}
+        history, periods = dict(self.history), dict(self.periods)
+        for kpi in (3, 4, 7):
+            key = f"{kpi}:{batch.captured_at}"
+            record = LiveRecord(kpi, batch.captured_at, TIMEZONE, None, key)
+            history[key] = {"record": asdict(record), "analysis": aggregate(analyses[kpi])}
+        monthly = {}
+        for month in pd.period_range(batch.period.start, batch.period.end, freq="M").astype(str):
+            frames = monthly_frames(batch, month)
+            if frames is None:
+                continue
+            monthly[month] = {kpi: analyze(kpi, frame) for kpi, frame in frames.items()}
+            for kpi, analysis in monthly[month].items():
+                key = f"{kpi}:{month}"
+                record = LiveRecord(kpi, batch.captured_at, TIMEZONE, month, key)
+                history[key] = {"record": asdict(record), "analysis": aggregate(analysis)}
+        stamp = datetime.fromisoformat(batch.captured_at)
+        previous_month = reporting_month(stamp)
+        records = {kpi: LiveRecord(kpi, batch.captured_at, TIMEZONE,
+                                  previous_month if kpi in MONTHLY_KPIS else None) for kpi in range(1, 8)}
+        score_period = Period(stamp.strftime("%Y-%m"), records)
+        if previous_month in monthly:
+            fill_period(score_period, {**analyses, **monthly[previous_month]})
+        else:
+            score_period.records = {kpi: LiveRecord(kpi, batch.captured_at, TIMEZONE, None,
+                                    period_start=batch.period.start.isoformat() if kpi in MONTHLY_KPIS else None,
+                                    period_end=batch.period.end.isoformat() if kpi in MONTHLY_KPIS else None) for kpi in range(1, 8)}
+            score_period.issue = "Der Live-Zeitraum enthält den vorherigen Kalendermonat nicht vollständig. Für den Score werden vollständige Monatsdaten und echte Snapshots benötigt."
+        periods[score_period.month] = asdict(score_period)
+        safe_frames = {kpi: frame.reindex(columns=NORMALIZED_COLUMNS).astype(object).where(pd.notna(frame), None).to_dict("records")
+                       for kpi, frame in batch.frames.items()}
+        payload = clean_json({"current": {"start": batch.period.start.isoformat(), "end": batch.period.end.isoformat(),
+                                          "captured_at": batch.captured_at, "frames": safe_frames},
+                              "history": history, "periods": periods})
+        temporary = self.path.with_suffix(".json.tmp")
+        try:
+            with temporary.open("w", encoding="utf-8") as output:
+                json.dump(payload, output, ensure_ascii=False, allow_nan=False)
+                output.flush()
+                os.fsync(output.fileno())
+            temporary.replace(self.path)
+        finally:
+            temporary.unlink(missing_ok=True)
+        self.batch, self.history, self.periods = batch, history, periods
+        self._reports = None
+
+    def reports(self):
+        if self._reports is not None:
+            return self._reports
+        if self.batch is None:
+            return {}
+        batch, reports = self.batch, {}
+        for kpi, frame in batch.frames.items():
+            analysis = analyze(kpi, frame)
+            monthly = kpi in MONTHLY_KPIS
+            single_month = (batch.period.start.day == 1 and
+                            batch.period.end == (pd.Timestamp(batch.period.start) + pd.offsets.MonthEnd()).date())
+            month = batch.period.start.strftime("%Y-%m") if monthly and single_month else None
+            record = LiveRecord(kpi, batch.captured_at, TIMEZONE, month, f"current:{kpi}",
+                                batch.period.start.isoformat() if monthly else None,
+                                batch.period.end.isoformat() if monthly else None)
+            history = [HistoryPoint(LiveRecord(**item["record"]), restore_analysis(item["analysis"]))
+                       for item in self.history.values() if item["record"]["kpi_number"] == kpi
+                       and (not monthly or item["record"]["reporting_month"] <= batch.period.end.strftime("%Y-%m"))]
+            history.sort(key=lambda item: item.record.reporting_month or item.record.export_timestamp)
+            note = "Monatsverlauf: ausschliesslich vollständig geladene Kalendermonate." if monthly else "Verlauf ausschliesslich tatsächlich aufgenommener Snapshots."
+            if len(history) < 2:
+                note += " Für einen Verlauf wird mindestens ein weiterer Datenstand benötigt."
+            if not history:
+                history = [HistoryPoint(record, analysis)]
+            reports[kpi] = KpiReport(record, analysis, history, note, "Znuny Live · lokal gespeicherter Datenstand",
+                                     comparable=not monthly or single_month)
+        self._reports = reports
+        return reports
+
+    def performance(self):
+        periods = [Period(**{**item, "records": {int(kpi): LiveRecord(**record) for kpi, record in item["records"].items()}})
+                   for _, item in sorted(self.periods.items())]
+        return compare_periods(periods)
+
+    def management(self):
+        reports = self.reports()
+        if len(reports) != 7:
+            raise DataError("Keine lokalen Znuny-Daten verfügbar.")
+        return management_report(reports, self.performance())
+
+    def clear(self):
+        self.path.unlink(missing_ok=True)
+        self.batch, self.history, self.periods = None, {}, {}
+        self._reports = None

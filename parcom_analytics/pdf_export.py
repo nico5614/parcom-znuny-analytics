@@ -12,7 +12,7 @@ from PySide6.QtGui import QFont, QImage, QPageLayout, QPageSize, QPainter, QPdfW
 
 from . import APP_NAME
 from .analytics import Analysis, KPI_TITLES, detail_value, field_label, format_value, metric_items
-from .charts import ROW_COLORS, draw_history, draw_score_history
+from .charts import ROW_COLORS, draw_history, draw_score_history, draw_management
 from .reports import KpiReport, ManagementReport, comparison_label, comparison_rows
 from .service_desk import HISTORY_MESSAGE, score_status
 from .storage import month_label, period_label
@@ -68,6 +68,9 @@ def export_pdf(path: Path, analysis: Analysis, period: str, figure: Figure, repo
     document = QTextDocument()
     document.setDefaultFont(QFont("Segoe UI", 9))
     body = document_header(KPI_TITLES[analysis.kpi], period)
+    if report:
+        stamp = datetime.fromisoformat(report.record.export_timestamp).strftime("%d.%m.%Y – %H:%M Uhr")
+        body += f'<p>Datenquelle: {escape(report.source)} · Datenstand: {stamp} ({escape(report.record.timezone)})</p>'
     body += metrics_html(metric_items(analysis)) + add_chart(document, figure, "current")
     body += f'<p>{escape(analysis.note)}</p>'
     if report:
@@ -98,10 +101,17 @@ def export_management_pdf(path: Path, report: ManagementReport) -> None:
     body += '<p>Basierend auf der Entwicklung der Service-KPIs. 100 % bedeutet keine Verschlechterung, keine SLA-Erfüllung. '
     body += 'KPI 1/2 sind ausschliesslich Kontext. Positive Ticketdifferenz: mehr geschlossen als neu eingegangen.</p>'
     body += metrics_html(list(report.metrics.items()), 3)
+    for kpi, item in report.kpis.items():
+        if item.analysis.references.get("invalid_values"):
+            body += f'<p>KPI {kpi}: {escape(item.analysis.note)}</p>'
+    body += '<h2 style="page-break-before:always">Service Desk auf einen Blick</h2>'
+    summary = Figure(figsize=(10, 4.6), dpi=100)
+    draw_management(summary, report)
+    body += add_chart(document, summary, "management", 480)
     body += '<h2 style="page-break-before:always">Datenbasis und Performance</h2>'
-    sources = [[f"KPI {kpi}", period_label(item.record), datetime.fromisoformat(item.record.export_timestamp).strftime("%d.%m.%Y %H:%M"), item.record.timezone]
+    sources = [[f"KPI {kpi}", period_label(item.record), datetime.fromisoformat(item.record.export_timestamp).strftime("%d.%m.%Y %H:%M"), item.record.timezone, item.source]
                for kpi, item in report.kpis.items()]
-    body += table_html(pd.DataFrame(sources, columns=["KPI", "Berichtszeitraum / Datenstand", "Exportzeitpunkt", "Zeitzone"]))
+    body += table_html(pd.DataFrame(sources, columns=["KPI", "Berichtszeitraum / Datenstand", "Exportzeitpunkt", "Zeitzone", "Datenquelle"]))
     body += '<p>Monats-KPIs und Snapshots können unterschiedliche Zeitbezüge haben. Abschlussverhältnis und Ticketdifferenz werden nur für denselben Berichtsmonat berechnet.</p>'
     if score:
         body += f'<p>Score: Exportmonat {month_label(score.current.month)} · Vergleich: {month_label(score.previous.month)}. '

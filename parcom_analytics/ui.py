@@ -1,66 +1,36 @@
 """The native Qt desktop interface."""
 
 import logging
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QAbstractTableModel, QDate, QModelIndex, QSettings, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QComboBox, QFileDialog, QFrame, QHBoxLayout,
     QHeaderView, QLabel, QLayout, QMainWindow, QMessageBox, QPushButton, QScrollArea,
-    QSizePolicy, QStackedWidget, QTableView, QVBoxLayout, QWidget,
+    QSizePolicy, QStackedWidget, QTableView, QVBoxLayout, QWidget, QLineEdit, QDateEdit, QProgressBar, QCheckBox,
 )
 
-from . import APP_NAME, VERSION
+from . import APP_NAME, DISPLAY_VERSION, PUBLISHER
 from .analytics import Analysis, DataError, KPI_DESCRIPTIONS, KPI_TITLES, detail_value, field_label, metric_items
-from .charts import ROW_COLORS, draw_chart, draw_history
+from .charts import draw_chart, draw_history
 from .pdf_export import export_management_pdf, export_pdf
 from .reports import (KpiReport, ManagementReport, available_records, comparison_label, comparison_rows,
                       default_report_filename, load_management_report, load_report)
 from .storage import ImportResult, LocalStore, MONTHLY_KPIS, month_label, period_label
+from .connection import ConnectionController
+from .live_cache import LiveCache
+from .live_data import DateRange
+from .animations import Animator
+from .analytics import format_duration, format_value
 
 LOGGER = logging.getLogger(__name__)
-ASSETS = Path(__file__).resolve().parent.parent / "assets"
-APP_LOGO = ASSETS / "app_logo.png"
-STYLE = """
-QWidget { color: #29343e; font-family: 'Segoe UI'; font-size: 13px; }
-QMainWindow, QWidget#shell, QWidget#page { background: #f2f4f6; }
-QFrame#header { background: white; border-bottom: 1px solid #e0e5e9; }
-QFrame#card { background: white; border: 1px solid #e0e5e9; border-radius: 12px; }
-QLabel { background: transparent; border: none; }
-QLabel#brand { font-size: 18px; font-weight: 600; }
-QLabel#title { font-size: 25px; font-weight: 600; }
-QLabel#section { font-size: 14px; font-weight: 600; }
-QLabel#muted { color: #65727d; }
-QLabel#eyebrow { color: #a95518; font-size: 11px; font-weight: 600; }
-QLabel#metric { color: #285c63; font-size: 26px; font-weight: 600; }
-QLabel#warning { background: #fff3e8; color: #86480f; border-radius: 6px; padding: 8px; }
-QPushButton { background: #e87926; color: white; border: none; border-radius: 7px;
-              padding: 11px 18px; font-weight: 600; }
-QPushButton:hover { background: #d4681c; }
-QPushButton:focus { border: 2px solid #285c63; }
-QPushButton:disabled { background: #e4e8eb; color: #8a959e; }
-QPushButton#nav { background: transparent; color: #65727d; padding: 10px 18px; }
-QPushButton#nav:hover { background: #f5f6f7; }
-QPushButton#nav:checked { background: #fff0e3; color: #ae5615; }
-QComboBox { background: white; border: 1px solid #d4dce2; border-radius: 7px; padding: 10px; }
-QComboBox:focus { border: 1px solid #e87926; }
-QComboBox::drop-down { border: none; width: 24px; }
-QComboBox::down-arrow { image: url(__ARROW__); width: 12px; height: 8px; }
-QComboBox QAbstractItemView { background: white; color: #29343e; selection-background-color: #fff0e3;
-                             selection-color: #29343e; padding: 4px; }
-QTableView { background: white; alternate-background-color: #f7f9fa; border: none;
-             gridline-color: #edf0f2; selection-background-color: #fff0e3; selection-color: #29343e; }
-QHeaderView::section { background: #f4f6f8; color: #52616b; padding: 8px;
-                       border: none; border-bottom: 1px solid #e4e8eb; font-weight: 600; }
-QScrollArea { border: none; background: transparent; }
-QScrollBar:vertical { background: #f2f4f6; width: 10px; }
-QScrollBar::handle:vertical { background: #cbd3d9; min-height: 25px; border-radius: 4px; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-""".replace("__ARROW__", (ASSETS / "chevron.svg").as_posix())
+from .theme import ASSETS, APP_LOGO, APP_ICON, STYLE, DARK_ROW_COLORS, dark_figure
+
 
 
 def label(text: str, role: str = "", wrap: bool = True) -> QLabel:
@@ -109,14 +79,14 @@ class FrameModel(QAbstractTableModel):
         if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.ToolTipRole):
             return detail_value(column, value)
         if role == Qt.ItemDataRole.ForegroundRole and column == "Ticket#":
-            return QColor("#285c63")
+            return QColor("#8dc9cb")
         if role == Qt.ItemDataRole.FontRole:
             font = QFont()
             font.setUnderline(column == "Ticket#")
             font.setBold(bool(self.analysis and index.row() in self.analysis.maximum_rows))
             return font
         if role == Qt.ItemDataRole.BackgroundRole and self.analysis and self.analysis.row_highlights:
-            color = ROW_COLORS.get(self.analysis.row_highlights[index.row()])
+            color = DARK_ROW_COLORS.get(self.analysis.row_highlights[index.row()])
             return QColor(color) if color else None
         return None
 
@@ -173,9 +143,20 @@ class ImportWorker(QThread):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, store: LocalStore):
+    def __init__(self, store: LocalStore, require_login=False):
         super().__init__()
         self.store = store
+        self.settings = QSettings(str(store.root / "settings.ini"), QSettings.Format.IniFormat)
+        self.animator = Animator(self, reduced=bool(QApplication.instance().property("reduce_motion")) or
+                                self.settings.value("reduce_motion", False, type=bool))
+        self.previous_metrics = {}
+        self.live_cache = LiveCache(store.root)
+        self.live_reports = self.live_cache.reports()
+        self.connection = ConnectionController(self, cache=self.live_cache)
+        self.closing = False
+        self.logout_complete = False
+        self.offline_after_logout = False
+        self.refresh_after_login = False
         self.analysis: Analysis | None = None
         self.current_report: KpiReport | None = None
         self.download_report: KpiReport | ManagementReport | None = None
@@ -183,39 +164,51 @@ class MainWindow(QMainWindow):
         self.worker: ImportWorker | None = None
         self.import_rows: list[list[str]] = []
         self.setWindowTitle(APP_NAME)
-        self.setWindowIcon(QIcon(str(APP_LOGO)))
+        self.setWindowIcon(QIcon(str(APP_ICON)))
         self.resize(1280, 800)
         self.setMinimumSize(1050, 650)
         self.setStyleSheet(STYLE)
         shell = QWidget()
         shell.setObjectName("shell")
         self.setCentralWidget(shell)
-        outer = QVBoxLayout(shell)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-        header = QFrame()
-        header.setObjectName("header")
-        header.setFixedHeight(78)
-        head = QHBoxLayout(header)
-        head.setContentsMargins(28, 12, 28, 12)
+        horizontal = QHBoxLayout(shell)
+        horizontal.setContentsMargins(0, 0, 0, 0)
+        horizontal.setSpacing(0)
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(188)
+        side = QVBoxLayout(sidebar)
+        side.setContentsMargins(14, 24, 14, 20)
+        side.setSpacing(8)
         icon = QLabel()
-        icon.setFixedSize(42, 42)
-        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon.setPixmap(QPixmap(str(APP_LOGO)).scaled(40, 40, Qt.AspectRatioMode.KeepAspectRatio,
-                                                                 Qt.TransformationMode.SmoothTransformation))
-        head.addWidget(icon)
-        head.addSpacing(6)
-        head.addWidget(label(APP_NAME, "brand", False))
-        head.addStretch()
+        icon.setPixmap(QPixmap(str(APP_LOGO)).scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio,
+                                                    Qt.TransformationMode.SmoothTransformation))
+        side.addWidget(icon)
+        side.addWidget(label("ParCom\nZnuny Analytics", "brand"))
+        side.addWidget(label("SERVICE-ANALYSE", "eyebrow"))
+        side.addSpacing(28)
         self.nav_buttons = []
-        for index, name in enumerate(["Start", "Upload", "Dashboard", "Service Desk", "Download"]):
+        for index, name in enumerate(["Info", "Import", "KPIs", "Übersicht", "Berichte"]):
             button = QPushButton(name)
             button.setObjectName("nav")
             button.setCheckable(True)
             button.clicked.connect(lambda checked=False, page=index: self.navigate(page))
-            head.addWidget(button)
             self.nav_buttons.append(button)
-        outer.addWidget(header)
+        for index in (3, 2, 1, 4):
+            side.addWidget(self.nav_buttons[index])
+        side.addStretch()
+        side.addWidget(self.nav_buttons[0])
+        self.logout_button = QPushButton("Abmelden")
+        self.logout_button.setObjectName("secondary")
+        self.logout_button.clicked.connect(self.logout)
+        side.addWidget(self.logout_button)
+        horizontal.addWidget(sidebar)
+        workspace = QWidget()
+        outer = QVBoxLayout(workspace)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        horizontal.addWidget(workspace, 1)
+        self._build_connection_controls(outer)
         if self.store.warning:
             outer.addWidget(label(self.store.warning, "warning"))
         self.stack = QStackedWidget()
@@ -225,24 +218,257 @@ class MainWindow(QMainWindow):
         self._build_dashboard()
         from .service_desk_ui import ServiceDeskPage
         self.service_desk = ServiceDeskPage(store)
+        self.service_desk.animator = self.animator
         self.stack.addWidget(self.service_desk)
         self._build_download()
         footer = QHBoxLayout()
         footer.setContentsMargins(28, 8, 28, 12)
-        footer.addWidget(label("●  Lokale Datenverarbeitung", "muted", False))
+        self.connection_status = label("", "muted", False)
+        footer.addWidget(self.connection_status)
         footer.addStretch()
-        footer.addWidget(label(f"ParCom Systems AG  ·  Version {VERSION}", "muted", False))
+        footer.addWidget(label(f"Version {DISPLAY_VERSION}", "muted", False))
         outer.addLayout(footer)
         self.refresh_dashboard()
         self.navigate(0)
+        self._build_login(shell, require_login)
+        self.connection.stateChanged.connect(self._connection_state)
+        self.connection.loggedIn.connect(self._login_succeeded)
+        self.connection.loggedOut.connect(self._logged_out)
+        self.connection.loaded.connect(self._live_loaded)
+        self.connection.failed.connect(self._network_error)
+        self.connection.busyChanged.connect(self._network_busy)
+        self.connection.progress.connect(lambda value: self.loading.setFormat(f"Znuny-Daten werden geladen … {value} %"))
+        self._connection_state("offline")
 
-    def _compact_page(self, watermark=False) -> QVBoxLayout:
+    @property
+    def is_live(self):
+        return self.source_combo.currentData() == "live"
+
+    def _build_connection_controls(self, outer):
+        controls = QVBoxLayout()
+        controls.setContentsMargins(28, 12, 28, 0)
+        source_row, range_row = QHBoxLayout(), QHBoxLayout()
+        self.source_combo = QComboBox()
+        self.source_combo.addItem("Lokale Excel-Daten", "excel")
+        self.source_combo.addItem("Znuny Live / letzter Datenstand", "live")
+        self.range_combo = QComboBox()
+        for text, value in [("7 Tage", "7d"), ("30 Tage", "30d"), ("3 Monate", "3m"),
+                            ("6 Monate", "6m"), ("12 Monate", "12m"), ("Benutzerdefiniert", "custom")]:
+            self.range_combo.addItem(text, value)
+        self.range_combo.setCurrentIndex(1)
+        self.from_date, self.to_date = QDateEdit(), QDateEdit()
+        for widget, offset in [(self.from_date, -29), (self.to_date, 0)]:
+            widget.setCalendarPopup(True)
+            widget.setDisplayFormat("dd.MM.yyyy")
+            widget.setDate(QDate.currentDate().addDays(offset))
+            widget.setMaximumDate(QDate.currentDate())
+            widget.hide()
+        self.refresh_button = QPushButton("↻ Aktualisieren")
+        self.refresh_button.clicked.connect(self.refresh_live)
+        self.connect_button = QPushButton("Verbinden")
+        self.connect_button.clicked.connect(self.show_login)
+        source_row.addWidget(self.source_combo)
+        source_row.addStretch()
+        source_row.addWidget(self.connect_button)
+        for widget in [self.range_combo, self.from_date, self.to_date, self.refresh_button]:
+            range_row.addWidget(widget)
+        range_row.addStretch()
+        controls.addLayout(source_row)
+        controls.addLayout(range_row)
+        self.range_combo.hide()
+        self.refresh_button.hide()
+        outer.addLayout(controls)
+        self.loading = QProgressBar()
+        self.loading.setRange(0, 0)
+        self.loading.setFormat("Znuny-Daten werden geladen …")
+        self.loading.hide()
+        outer.addWidget(self.loading)
+        self.network_note = label(self.live_cache.warning, "warning")
+        self.network_note.setVisible(bool(self.live_cache.warning))
+        outer.addWidget(self.network_note)
+        self.range_combo.currentIndexChanged.connect(self._range_changed)
+        self.source_combo.currentIndexChanged.connect(self._source_changed)
+
+    def _build_login(self, shell, required):
+        self.takeCentralWidget()
+        self.gate = QStackedWidget()
+        self.gate.addWidget(shell)
+        page = QWidget()
+        page.setObjectName("page")
+        layout = QVBoxLayout(page)
+        layout.addStretch()
+        card = Card()
+        card.setMaximumWidth(480)
+        form = QVBoxLayout(card)
+        form.setContentsMargins(40, 36, 40, 36)
+        form.setSpacing(16)
+        logo = QLabel()
+        logo.setPixmap(QPixmap(str(APP_LOGO)).scaled(56, 56, Qt.AspectRatioMode.KeepAspectRatio,
+                                                    Qt.TransformationMode.SmoothTransformation))
+        form.addWidget(logo)
+        form.addWidget(label(APP_NAME, "brand"))
+        form.addWidget(label("Mit Znuny verbinden", "title"))
+        form.addWidget(label("Ihr persönlicher Zugang zum Service Desk.", "muted"))
+        form.addWidget(label("Benutzername", "section"))
+        self.username = QLineEdit()
+        self.username.setAccessibleName("Benutzername")
+        form.addWidget(self.username)
+        form.addWidget(label("Passwort", "section"))
+        self.password = QLineEdit()
+        self.password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.password.setAccessibleName("Passwort")
+        self.password.returnPressed.connect(self.login)
+        form.addWidget(self.password)
+        self.login_error = label("", "warning")
+        self.login_error.hide()
+        form.addWidget(self.login_error)
+        self.login_button = QPushButton("Anmelden")
+        self.login_button.clicked.connect(self.login)
+        form.addWidget(self.login_button)
+        form.addWidget(label("Znuny Server\nznuny.parcom.ch", "muted"))
+        self.offline_button = QPushButton("Offline mit lokalen Daten fortfahren")
+        self.offline_button.setObjectName("secondary")
+        self.offline_button.clicked.connect(self.enter_offline)
+        form.addWidget(self.offline_button)
+        form.addWidget(label("Passwort und Sitzung werden nicht gespeichert.", "muted"))
+        layout.addWidget(card, 0, Qt.AlignmentFlag.AlignHCenter)
+        layout.addStretch()
+        login_footer = QHBoxLayout()
+        self.login_status = label("", "muted")
+        login_footer.addWidget(self.login_status)
+        login_footer.addStretch()
+        login_footer.addWidget(label(f"Version {DISPLAY_VERSION}", "muted"))
+        layout.addLayout(login_footer)
+        self.gate.addWidget(page)
+        self.setCentralWidget(self.gate)
+        self.gate.setCurrentIndex(1 if required else 0)
+
+    def show_login(self):
+        self.password.clear()
+        self.login_error.hide()
+        self.gate.setCurrentIndex(1)
+        self.username.setFocus()
+
+    def enter_offline(self):
+        self.password.clear()
+        self.username.clear()
+        if self.connection.client._session_id or self.connection.worker:
+            self.offline_after_logout = True
+            self.logout()
+            return
+        self.gate.setCurrentIndex(0)
+        self.navigate(3)
+
+    def login(self):
+        if self.connection.worker:
+            return
+        if not self.username.text().strip() or not self.password.text():
+            self.login_error.setText("Bitte Benutzername und Passwort eingeben.")
+            self.login_error.show()
+            return
+        password = self.password.text()
+        self.password.clear()
+        self.connection.login(self.username.text().strip(), password)
+        password = None
+
+    def _login_succeeded(self):
+        self.logout_complete = False
+        self.username.clear()
+        self.login_error.hide()
+        self.network_note.hide()
+        self.gate.setCurrentIndex(0)
+        self.animator.fade(self.gate.currentWidget())
+        self.source_combo.setCurrentIndex(1)
+        self.navigate(3)
+        self.refresh_after_login = True
+
+    def _connection_state(self, state):
+        text, color = {"online": ("Verbunden mit Znuny", "#59bd8b"),
+                       "connecting": ("Verbindung wird hergestellt …", "#d4b15f"),
+                       "offline": ("Keine Verbindung zu Znuny – nur lokale Daten verfügbar", "#e08181")}[state]
+        self.connection_status.setText("●  " + text)
+        self.connection_status.setStyleSheet(f"color: {color};")
+        if hasattr(self, "login_status"):
+            self.login_status.setText("●  " + text)
+            self.login_status.setStyleSheet(f"color: {color};")
+        self.refresh_button.setEnabled(state == "online" and self.connection.worker is None and self.is_live)
+        self.connect_button.setText("Neu verbinden" if state == "online" else "Verbinden")
+
+    def _network_busy(self, busy):
+        self.loading.setVisible(busy)
+        self.login_button.setEnabled(not busy)
+        self.login_button.setText("Anmeldung läuft …" if busy and self.gate.currentIndex() == 1 else "Anmelden")
+        self.offline_button.setEnabled(not busy)
+        self.connect_button.setEnabled(not busy)
+        self.refresh_button.setEnabled(not busy and self.connection.state == "online" and self.is_live)
+        if not busy:
+            if self.closing and self.logout_complete:
+                QTimer.singleShot(0, self.close)
+            elif self.refresh_after_login:
+                self.refresh_after_login = False
+                QTimer.singleShot(0, self.refresh_live)
+
+    def _network_error(self, message):
+        self.login_error.setText(message)
+        self.login_error.show()
+        self.network_note.setText(message + " Der letzte lokale Datenstand bleibt verfügbar.")
+        self.network_note.show()
+
+    def _range_changed(self):
+        custom = self.is_live and self.range_combo.currentData() == "custom"
+        self.from_date.setVisible(custom)
+        self.to_date.setVisible(custom)
+
+    def _source_changed(self):
+        self.range_combo.setVisible(self.is_live)
+        self.refresh_button.setVisible(self.is_live)
+        self._range_changed()
+        self._connection_state(self.connection.state)
+        self.service_desk.live_cache = self.live_cache if self.is_live else None
+        self.kpi_changed()
+        self.refresh_download_choices()
+        self.service_desk.refresh()
+
+    def refresh_live(self):
+        if self.connection.worker or self.connection.state != "online":
+            return
+        try:
+            period = (DateRange(self.from_date.date().toPython(), self.to_date.date().toPython())
+                      if self.range_combo.currentData() == "custom" else DateRange.preset(self.range_combo.currentData()))
+        except DataError as error:
+            self._network_error(str(error))
+            return
+        self.network_note.hide()
+        self.connection.refresh(period)
+
+    def _live_loaded(self, reports):
+        self.live_reports = reports
+        self.kpi_changed()
+        self.refresh_download_choices()
+        self.service_desk.refresh()
+
+    def logout(self):
+        self.refresh_after_login = False
+        self.password.clear()
+        self.connection.logout()
+
+    def _logged_out(self):
+        self.logout_complete = True
+        if not self.closing:
+            if self.offline_after_logout:
+                self.offline_after_logout = False
+                self.gate.setCurrentIndex(0)
+                self.navigate(3)
+            else:
+                self.show_login()
+
+    def _compact_page(self, watermark=False, maximum_width=700) -> QVBoxLayout:
         page = QWidget()
         page.setObjectName("page")
         layout = QHBoxLayout(page)
         layout.setContentsMargins(24, 18, 24, 18)
         card = Card(watermark)
-        card.setMaximumWidth(700)
+        card.setMaximumWidth(maximum_width)
         card.setMinimumWidth(550)
         card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         content = QVBoxLayout(card)
@@ -263,18 +489,27 @@ class MainWindow(QMainWindow):
         layout.addWidget(label(APP_NAME, "title"))
         layout.addWidget(label("Auswertung und Visualisierung von Service-KPIs aus Znuny.", "muted"))
         sections = [
-            ("Über die Anwendung", "ParCom Znuny Analytics dient zur strukturierten Auswertung von KPI-Exporten aus Znuny. Die Anwendung verarbeitet lokal gespeicherte Excel-Dateien und stellt die Ergebnisse übersichtlich im Dashboard dar."),
-            ("So funktioniert es", "1. Znuny-Excel-Dateien unter «Upload» importieren.\n2. KPI und Zeitraum im «Dashboard» auswählen.\n3. Die aktuelle Auswertung unter «Download» als PDF exportieren."),
-            ("Datenschutz", "Alle importierten Daten werden ausschliesslich lokal auf diesem Computer verarbeitet. Es erfolgt keine Übertragung an externe Dienste."),
-            ("Entwicklung", "Entwickelt von Nico Köchli für ParCom Systems AG."),
+            ("Über die Anwendung", "Analytics- und Reporting-Anwendung für Znuny. Live-Kennzahlen und lokale Excel-Daten für den Service Desk."),
+            ("So funktioniert es", "1. Mit Znuny verbinden oder offline fortfahren.\n2. Datenquelle, KPI und Zeitraum auswählen.\n3. Unter «Berichte» die gewünschte Auswertung als PDF exportieren."),
+            ("Datenschutz", "Daten werden lokal ausgewertet. Nur die Anmeldung und lesende Datenabfragen kommunizieren per HTTPS mit Znuny. Passwort und Sitzung werden nicht gespeichert."),
+            ("Entwicklung", f"Entwickelt von {PUBLISHER}\nfür ParCom Systems AG\n\nHerausgeber: {PUBLISHER}"),
         ]
         for heading, text in sections:
             layout.addWidget(label(heading, "section"))
             layout.addWidget(label(text, "muted"))
-        layout.addWidget(label(f"Version {VERSION}", "muted"))
+        layout.addWidget(label(f"Version {DISPLAY_VERSION}", "muted"))
+        self.reduce_motion = QCheckBox("Animationen reduzieren")
+        self.reduce_motion.setChecked(self.animator.reduced)
+        self.reduce_motion.toggled.connect(self._motion_changed)
+        layout.addWidget(self.reduce_motion)
+
+    def _motion_changed(self, checked):
+        self.animator.finish_all()
+        self.animator.reduced = checked
+        self.settings.setValue("reduce_motion", checked)
 
     def _build_upload(self):
-        layout = self._compact_page()
+        layout = self._compact_page(maximum_width=1200)
         layout.addWidget(label("LOKALE EXCEL-EXPORTE", "eyebrow"))
         layout.addWidget(label("Daten importieren", "title"))
         layout.addWidget(label("Wählen Sie einen oder mehrere Znuny-Exporte (.xlsx). KPI und Datenstand werden automatisch aus dem Dateinamen erkannt.", "muted"))
@@ -288,6 +523,64 @@ class MainWindow(QMainWindow):
         self.upload_table.setMaximumHeight(260)
         layout.addWidget(self.upload_table)
         self._refresh_import_table()
+        self.dataset_summary = label("", "eyebrow")
+        layout.addWidget(self.dataset_summary)
+        self.dataset_table = table_view()
+        self.dataset_table.setMinimumHeight(200)
+        self.dataset_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        layout.addWidget(self.dataset_table)
+        self.delete_button = QPushButton("Ausgewählten Datensatz löschen")
+        self.delete_button.setObjectName("secondary")
+        self.delete_button.clicked.connect(self.delete_dataset)
+        layout.addWidget(self.delete_button)
+        self.clear_live_button = QPushButton("Lokalen Znuny-Datenstand und Live-Historie löschen")
+        self.clear_live_button.setObjectName("secondary")
+        self.clear_live_button.clicked.connect(self.clear_live_cache)
+        layout.addWidget(self.clear_live_button)
+        self.refresh_datasets()
+
+    def refresh_datasets(self):
+        self.dataset_records = sorted(self.store.records, key=lambda record: record.export_timestamp, reverse=True)
+        rows = []
+        for record in self.dataset_records:
+            latest = self.store.latest(record.kpi_number, record.reporting_month)
+            rows.append([f"KPI {record.kpi_number}", period_label(record), record.export_timestamp[:16].replace("T", " "),
+                         "Ja" if record == latest else "", record.original_filename])
+        set_table(self.dataset_table, pd.DataFrame(rows, columns=["KPI", "Zeitraum / Datenstand", "Exportzeit", "Neuester", "Datei"]))
+        present = {record.kpi_number for record in self.store.records}
+        self.dataset_summary.setText(f"Importierte KPIs: {len(present)} / 7 · " + ("Alle KPI-Daten vorhanden" if len(present) == 7 else
+                                    "Fehlend: " + ", ".join(str(kpi) for kpi in range(1, 8) if kpi not in present)))
+        self.delete_button.setEnabled(bool(rows) and self.worker is None)
+
+    def delete_dataset(self):
+        indexes = self.dataset_table.selectionModel().selectedRows()
+        if not indexes or self.worker is not None:
+            return
+        record = self.dataset_records[indexes[0].row()]
+        if QMessageBox.question(self, "Datensatz löschen", f"KPI {record.kpi_number} · {period_label(record)} löschen?\nNur die lokale Anwendungskopie wird entfernt; die Originaldatei bleibt erhalten.",
+                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.store.delete_record(record)
+        except Exception as error:
+            LOGGER.error("Dataset deletion failed: %s", type(error).__name__)
+            QMessageBox.warning(self, "Löschen fehlgeschlagen", "Die lokale Datei konnte nicht entfernt werden.")
+        self.refresh_datasets()
+        self.kpi_changed()
+        self.refresh_download_choices()
+        self.service_desk.refresh()
+
+    def clear_live_cache(self):
+        if self.connection.worker:
+            return
+        if QMessageBox.question(self, "Znuny-Datenstand löschen", "Letzten lokalen Znuny-Datenstand und dessen aggregierte Historie löschen? Excel-Importe bleiben erhalten.",
+                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+            try:
+                self.live_cache.clear()
+                self.live_reports = {}
+                self._source_changed()
+            except OSError:
+                QMessageBox.warning(self, "Löschen fehlgeschlagen", "Der lokale Znuny-Datenstand konnte nicht entfernt werden.")
 
     def _build_dashboard(self):
         page = QWidget()
@@ -296,11 +589,11 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(28, 20, 28, 8)
         layout.setSpacing(12)
         controls = QHBoxLayout()
-        controls.addWidget(label("Dashboard", "title"))
+        controls.addWidget(label("KPI-Analyse", "title"))
         controls.addStretch()
         self.kpi_combo = QComboBox()
         self.kpi_combo.setAccessibleName("KPI auswählen")
-        self.kpi_combo.setMinimumWidth(445)
+        self.kpi_combo.setMinimumWidth(270)
         self.kpi_combo.addItem("KPI auswählen...", None)
         for kpi, title in KPI_TITLES.items():
             self.kpi_combo.addItem(title, kpi)
@@ -311,7 +604,7 @@ class MainWindow(QMainWindow):
         controls.addWidget(self.month_combo)
         self.snapshot_combo = QComboBox()
         self.snapshot_combo.setAccessibleName("Datenstand auswählen")
-        self.snapshot_combo.setMinimumWidth(245)
+        self.snapshot_combo.setMinimumWidth(190)
         controls.addWidget(self.snapshot_combo)
         layout.addLayout(controls)
         self.dashboard_stack = QStackedWidget()
@@ -432,6 +725,7 @@ class MainWindow(QMainWindow):
             self.refresh_download_choices()
         for position, button in enumerate(self.nav_buttons):
             button.setChecked(position == index)
+        self.animator.fade(self.stack.currentWidget())
 
     def choose_files(self):
         filenames, _ = QFileDialog.getOpenFileNames(self, "Znuny-Excel-Dateien auswählen", "", "Excel-Dateien (*.xlsx)")
@@ -444,6 +738,7 @@ class MainWindow(QMainWindow):
         self.import_rows = []
         self._refresh_import_table()
         self.upload_button.setEnabled(False)
+        self.delete_button.setEnabled(False)
         self.upload_summary.setText(f"{len(paths)} Dateien werden geprüft und importiert …")
         self.worker = ImportWorker(self.store, paths, self)
         self.worker.imported.connect(self._import_completed)
@@ -476,6 +771,7 @@ class MainWindow(QMainWindow):
         self.upload_summary.setText(f"{imported} importiert · {duplicates} bereits vorhanden · {errors} nicht importiert")
         self.kpi_changed()
         self.refresh_download_choices()
+        self.refresh_datasets()
         if self.stack.currentIndex() == 3:
             self.service_desk.refresh()
 
@@ -513,10 +809,19 @@ class MainWindow(QMainWindow):
         self.current_report = None
         self.current_period = ""
         kpi = self.kpi_combo.currentData()
-        self.month_combo.setVisible(kpi in MONTHLY_KPIS)
-        self.snapshot_combo.setVisible(bool(kpi and kpi not in MONTHLY_KPIS))
+        self.month_combo.setVisible(not self.is_live and kpi in MONTHLY_KPIS)
+        self.snapshot_combo.setVisible(not self.is_live and bool(kpi and kpi not in MONTHLY_KPIS))
+        if self.is_live:
+            if not self.live_reports:
+                self._empty("Keine lokalen Znuny-Daten verfügbar.", "Verbinden Sie sich mit Znuny und wählen Sie «Aktualisieren».")
+            elif not kpi:
+                self._empty("Keine KPI ausgewählt", "Wählen Sie oben eine KPI aus, um die Auswertung anzuzeigen.")
+            else:
+                report = self.live_reports[kpi]
+                self._render_analysis(report.analysis, period_label(report.record), report)
+            return
         if not self.store.records:
-            self._empty("Keine Dateien hochgeladen", "Importieren Sie zuerst Znuny-Excel-Dateien unter «Upload».")
+            self._empty("Keine Dateien hochgeladen", "Importieren Sie zuerst Znuny-Excel-Dateien unter «Import».")
         elif not kpi:
             self._empty("Keine KPI ausgewählt", "Wählen Sie oben eine KPI aus, um die Auswertung anzuzeigen.")
         elif not any(record.kpi_number == kpi for record in self.store.records):
@@ -538,21 +843,38 @@ class MainWindow(QMainWindow):
                     self._empty("Auswertung nicht möglich", "Die gespeicherte Excel-Datei konnte nicht ausgewertet werden. Bitte importieren Sie die Datei erneut.")
 
     def _render_analysis(self, analysis: Analysis, period: str, report: KpiReport | None = None):
+        self.animator.stop(self.canvas)
+        self.animator.stop(self.history_canvas)
         self.dashboard_title.setText(KPI_TITLES[analysis.kpi])
         self.description.setText(KPI_DESCRIPTIONS[analysis.kpi])
         self.period.setText(period)
+        if report:
+            self.period.setText(period + " · " + report.source)
+            if self.is_live and analysis.kpi in MONTHLY_KPIS:
+                stamp = datetime.fromisoformat(report.record.export_timestamp)
+                self.period.setText(self.period.text() + f" · Datenstand: {stamp:%d.%m.%Y %H:%M} Uhr")
         while self.metrics_layout.count():
             previous_card = self.metrics_layout.takeAt(0).widget()
             previous_card.hide()
             previous_card.deleteLater()
-        for heading, value in metric_items(analysis):
+        count_widgets = []
+        for position, (heading, value) in enumerate(metric_items(analysis)):
             card = Card()
             box = QVBoxLayout(card)
             box.setContentsMargins(16, 12, 16, 12)
             box.addWidget(label(heading, "muted"))
-            box.addWidget(label(value, "metric"))
+            metric_label = label(value, "metric")
+            box.addWidget(metric_label)
             self.metrics_layout.addWidget(card, 1)
+            raw_name = list(analysis.metrics)[position] if position < len(analysis.metrics) else None
+            raw = analysis.metrics.get(raw_name)
+            if isinstance(raw, (int, float)):
+                key = (analysis.kpi, raw_name)
+                formatter = format_duration if "(Min.)" in raw_name else (lambda number: format_value(round(number)))
+                count_widgets.append((metric_label, self.previous_metrics.get(key, 0), raw, formatter))
+                self.previous_metrics[key] = raw
         draw_chart(self.figure, analysis)
+        dark_figure(self.figure)
         self.canvas.draw()
         self.data_note.setText(analysis.note)
         self.data_note.setVisible(bool(analysis.note))
@@ -564,6 +886,7 @@ class MainWindow(QMainWindow):
         self.history_card.setVisible(report is not None)
         if report:
             draw_history(self.history_figure, report)
+            dark_figure(self.history_figure)
             self.history_canvas.draw()
             self.history_note.setText(report.history_note)
             self.history_note.setVisible(bool(report.history_note))
@@ -571,6 +894,11 @@ class MainWindow(QMainWindow):
             set_table(self.comparison_table, comparison_rows(report))
             self.comparison_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.dashboard_stack.setCurrentIndex(1)
+        for args in count_widgets:
+            self.animator.count(*args)
+        self.animator.chart(self.canvas)
+        self.animator.chart(self.history_canvas)
+        self.animator.fade(self.detail_table)
         self.analysis, self.current_period = analysis, period
         self.current_report = report
 
@@ -590,7 +918,9 @@ class MainWindow(QMainWindow):
         previous = self.download_period_combo.currentData()
         self.download_period_combo.blockSignals(True)
         self.download_period_combo.clear()
-        if isinstance(kpi, int):
+        if isinstance(kpi, int) and self.is_live and kpi in self.live_reports:
+            self.download_period_combo.addItem(period_label(self.live_reports[kpi].record), "live")
+        elif isinstance(kpi, int):
             for record in available_records(self.store, kpi):
                 self.download_period_combo.addItem(period_label(record).removeprefix("Datenstand: "), record.stored_path)
         existing = self.download_period_combo.findData(previous)
@@ -608,8 +938,14 @@ class MainWindow(QMainWindow):
         kpi = self.download_combo.currentData()
         note = "Wählen Sie eine Auswertung aus."
         try:
-            if not self.store.records:
-                note = "Keine Auswertungen verfügbar.\nImportieren Sie zuerst Znuny-Excel-Dateien unter «Upload»."
+            if self.is_live:
+                if kpi == "service_desk":
+                    self.download_report = self.live_cache.management()
+                elif isinstance(kpi, int):
+                    self.download_report = self.live_reports.get(kpi)
+                note = "Znuny-Datenstand · Bericht mit Kennzahlen, Diagrammen und Historie." if self.download_report else "Keine lokalen Znuny-Daten verfügbar."
+            elif not self.store.records:
+                note = "Keine Auswertungen verfügbar.\nImportieren Sie zuerst Znuny-Excel-Dateien unter «Import»."
             elif kpi == "service_desk":
                 self.download_report = load_management_report(self.store)
                 note = "PDF enthält:\n• Management-Kennzahlen\n• Performance Score, sofern verfügbar\n• Vergleichswerte und Trenddiagramme\n• Datenbasis\n\nAggregierter Bericht ohne Ticketdetails und Kundendaten."
@@ -658,5 +994,13 @@ class MainWindow(QMainWindow):
         if self.worker is not None:
             QMessageBox.information(self, "Import läuft", "Bitte warten Sie, bis der Dateiimport abgeschlossen ist.")
             event.ignore()
+        elif self.connection.worker or (self.connection.client._session_id and not self.logout_complete):
+            event.ignore()
+            if not self.closing:
+                self.closing = True
+                self.logout()
+                self.network_note.setText("Anwendung wird geschlossen; Znuny-Sitzung wird beendet …")
+                self.network_note.show()
         else:
+            self.animator.finish_all()
             event.accept()

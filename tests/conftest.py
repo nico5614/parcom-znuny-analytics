@@ -7,6 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pandas as pd
 import pytest
+import requests
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFontDatabase
 
@@ -32,6 +33,7 @@ def tickets():
 def qapp():
     app = QApplication.instance() or QApplication([])
     app.setStyle("Fusion")
+    app.setProperty("reduce_motion", True)
     # The Windows offscreen Qt plugin does not discover system fonts itself.
     if os.name == "nt":
         fonts = Path(os.environ["WINDIR"]) / "Fonts"
@@ -42,3 +44,10 @@ def qapp():
 
 def filename(kpi=7, date="2026-09-29", time="10-52", zone="Europe_Zurich"):
     return f"KPI_{kpi}___PBX__Test_Created_{date}_{time}_TimeZone_{zone}.xlsx"
+
+
+@pytest.fixture(autouse=True)
+def no_real_network(monkeypatch):
+    def blocked(*args, **kwargs):
+        raise AssertionError("Real network access is forbidden in tests")
+    monkeypatch.setattr(requests.Session, "request", blocked)

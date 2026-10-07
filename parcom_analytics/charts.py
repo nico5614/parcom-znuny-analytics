@@ -41,16 +41,19 @@ def draw_chart(figure: Figure, analysis: Analysis) -> None:
         figure.text(0.08, 0.88, analysis.chart_title, fontsize=11, color="#29343e", weight="bold")
         count, total = int(values.iloc[0]), int(values.sum())
         if total:
-            axis.pie(values, colors=[RED, "#dfe4e8"], startangle=90, counterclock=False,
+            axis.pie(values, colors=[RED, "#dfe4e8", AMBER], startangle=90, counterclock=False,
                      wedgeprops={"width": 0.29, "edgecolor": "white", "linewidth": 2})
         else:
             axis.pie([1], colors=["#edf0f2"], wedgeprops={"width": 0.29, "edgecolor": "white"})
-        axis.text(0, 0.08, f'{format_value(analysis.references["escalation_rate"])} %',
+        axis.text(0, 0.20, f'{format_value(analysis.references["escalation_rate"])} %',
                   ha="center", va="center", fontsize=21, weight="bold", color=RED if count else "#29343e")
-        axis.text(0, -0.20, "Eskalationsquote", ha="center", fontsize=9, color="#65727d")
+        axis.text(0, -0.08, f"{count} / {total}", ha="center", va="center", fontsize=12, color="#29343e")
+        axis.text(0, -0.32, "Eskalationsquote", ha="center", fontsize=9, color="#65727d")
         axis.text(1.35, 0.3, f"{count} von {total} Tickets eskaliert", fontsize=12, weight="bold", color="#29343e")
         axis.text(1.35, -0.05, f"●  Eskaliert: {count}", color=RED, fontsize=10)
-        axis.text(1.35, -0.35, f"●  Nicht eskaliert: {total-count}", color="#65727d", fontsize=10)
+        axis.text(1.35, -0.35, f"●  Nicht eskaliert: {int(values.get('Nicht eskaliert', 0))}", color="#65727d", fontsize=10)
+        if values.get("Unbekannt", 0):
+            axis.text(1.35, -0.65, f"●  Unbekannt: {int(values['Unbekannt'])}", color=AMBER, fontsize=10)
         axis.set_xlim(-1.5, 4.5)
         axis.set_ylim(-1.12, 1.15)
         axis.set_axis_off()
@@ -89,7 +92,7 @@ def draw_chart(figure: Figure, analysis: Analysis) -> None:
         axis.margins(y=0.25)
     else:
         bars = axis.bar(range(len(values)), values.values,
-                        color=[ORANGE, GRAY, AMBER, RED, "#dfe4e8"][:len(values)], width=0.6)
+                        color=[GRAY, GRAY, AMBER, RED, "#dfe4e8"][:len(values)], width=0.6)
         axis.set_xticks(range(len(values)), values.index)
         axis.bar_label(bars, padding=4, fontsize=9, color="#29343e")
         axis.margins(y=0.25)
@@ -163,3 +166,35 @@ def draw_score_history(figure: Figure, report: Report) -> None:
     axis.tick_params(axis="both", length=0, labelsize=9, colors="#65727d", pad=8)
     axis.spines[["top", "right", "left", "bottom"]].set_visible(False)
     axis.grid(axis="y", color="white", linewidth=1)
+
+
+def draw_management(figure: Figure, report) -> None:
+    """Four aggregate panels, with independent scales for time and volume."""
+    figure.clear()
+    figure.set_facecolor("white")
+    kpis = report.kpis
+    panels = [
+        ("Ticketvolumen", ["Neu", "Geschlossen"],
+         [kpis[1].analysis.metrics["Anzahl neue Tickets"], kpis[2].analysis.metrics["Anzahl geschlossene Tickets"]], "count"),
+        ("Aktueller Bestand", ["Offen (inkl. wartend)", "Wartend"],
+         [kpis[3].analysis.metrics["Aktuell offene Tickets"], kpis[7].analysis.metrics["Anzahl wartende Tickets"]], "count"),
+        ("Eskalationsquote", ["Erstantwort eskaliert"], [kpis[4].analysis.references["escalation_rate"]], "percent"),
+        ("Servicezeiten · Median", ["Reaktion", "Lösung"],
+         [kpis[5].analysis.references["median"], kpis[6].analysis.references["median"]], "minutes"),
+    ]
+    for position, (title, names, values, unit) in enumerate(panels, 1):
+        axis = figure.add_subplot(2, 2, position)
+        axis.set_title(title, loc="left", fontsize=11, weight="bold", color="#29343e", pad=20)
+        bars = axis.bar(names, values, color=[ORANGE, TEAL], width=.45)
+        formatted = [format_duration(value) if unit == "minutes" else f"{format_value(value)}{' %' if unit == 'percent' else ''}" for value in values]
+        axis.bar_label(bars, labels=formatted, padding=4, fontsize=9, color="#29343e")
+        axis.set_ylim(0, max([1, *[value * 1.25 for value in values if math.isfinite(value)]]))
+        if unit == "minutes":
+            axis.yaxis.set_major_formatter(FuncFormatter(lambda value, _: format_duration(value)))
+        elif unit == "percent":
+            axis.set_ylim(0, 110)
+            axis.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:g} %"))
+        else:
+            axis.yaxis.set_major_locator(MaxNLocator(integer=True, nbins=4))
+        style_axis(axis)
+    figure.subplots_adjust(left=.12, right=.97, top=.89, bottom=.10, hspace=.72, wspace=.4)

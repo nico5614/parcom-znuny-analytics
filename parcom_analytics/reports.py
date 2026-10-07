@@ -25,6 +25,8 @@ class KpiReport:
     analysis: Analysis
     history: list[HistoryPoint]
     history_note: str = ""
+    source: str = "Lokaler Import"
+    comparable: bool = True
 
 
 @dataclass
@@ -88,7 +90,7 @@ def history_value(value: float, unit: str) -> str:
 
 def comparison_rows(report: KpiReport) -> pd.DataFrame:
     rows = []
-    previous = report.history[-2].analysis if len(report.history) > 1 else None
+    previous = report.history[-2].analysis if report.comparable and len(report.history) > 1 else None
     for name, (current, unit) in history_metrics(report.analysis).items():
         old = history_metrics(previous)[name][0] if previous else float("nan")
         difference = current - old
@@ -104,6 +106,8 @@ def comparison_rows(report: KpiReport) -> pd.DataFrame:
 
 
 def comparison_label(report: KpiReport) -> str:
+    if not report.comparable:
+        return "Für diesen Zeitraum ist kein vergleichbarer vorheriger Datenstand vorhanden."
     if len(report.history) < 2:
         return "Kein vorheriger Datenstand vorhanden"
     return "Vergleich mit: " + period_label(report.history[-2].record)
@@ -120,11 +124,15 @@ def load_management_report(store: LocalStore) -> ManagementReport:
         analysis = report.analysis
         if analysis.references.get("invalid_values", 0) or (kpi in {5, 6} and analysis.chart.empty):
             raise DataError(f"KPI {kpi}: Für die Gesamtübersicht fehlen gültige Alters- oder Zeitwerte. Bitte prüfen Sie den Export.")
+    return management_report(kpis, build_report(store))
+
+
+def management_report(kpis: dict[int, KpiReport], performance: Report) -> ManagementReport:
     metrics = {"Neue Tickets": format_value(kpis[1].analysis.metrics["Anzahl neue Tickets"]),
                "Geschlossene Tickets": format_value(kpis[2].analysis.metrics["Anzahl geschlossene Tickets"])}
     new = kpis[1].analysis.metrics["Anzahl neue Tickets"]
     closed = kpis[2].analysis.metrics["Anzahl geschlossene Tickets"]
-    same_month = kpis[1].record.reporting_month == kpis[2].record.reporting_month
+    same_month = period_label(kpis[1].record) == period_label(kpis[2].record)
     metrics["Abschlussverhältnis (geschlossen / neu)"] = (f"{format_value(closed / new * 100)} %" if new else "Nicht berechenbar: keine neuen Tickets") if same_month else "Nicht vergleichbare Berichtsmonate"
     metrics["Ticketdifferenz (geschlossen − neu)"] = format_value(closed - new) if same_month else "Nicht vergleichbare Berichtsmonate"
     metrics.update({
@@ -136,7 +144,7 @@ def load_management_report(store: LocalStore) -> ManagementReport:
         "Wartende Tickets": format_value(kpis[7].analysis.metrics["Anzahl wartende Tickets"]),
         "Wartende Tickets >30 Tage": format_value(kpis[7].analysis.metrics["Älter als 30 Tage"]),
     })
-    return ManagementReport(kpis, build_report(store), metrics)
+    return ManagementReport(kpis, performance, metrics)
 
 
 def default_report_filename(report: KpiReport | ManagementReport) -> str:
@@ -145,5 +153,6 @@ def default_report_filename(report: KpiReport | ManagementReport) -> str:
     names = {1: "Neue_Tickets", 2: "Geschlossene_Tickets", 3: "Offene_Tickets", 4: "Eskalationen",
              5: "Reaktionszeit", 6: "Loesungszeit", 7: "Wartende_Tickets"}
     record = report.record
-    period = record.reporting_month or datetime.fromisoformat(record.export_timestamp).strftime("%Y-%m-%d_%H-%M")
+    period = (f"{record.period_start}_{record.period_end}" if getattr(record, "period_start", None)
+              else record.reporting_month or datetime.fromisoformat(record.export_timestamp).strftime("%Y-%m-%d_%H-%M"))
     return f"KPI_{record.kpi_number}_{names[record.kpi_number]}_{period}.pdf"

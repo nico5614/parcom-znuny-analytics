@@ -15,10 +15,13 @@ from PySide6.QtWidgets import (
 from .service_desk import (
     HISTORY_MESSAGE, METRICS, Report, build_report, score_status,
 )
-from .analytics import format_duration
-from .charts import draw_score_history
-from .storage import LocalStore, month_label, reporting_month
+from .analytics import format_duration, DataError
+from .charts import draw_score_history, draw_management
+from .reports import load_management_report
+from .storage import LocalStore, month_label, reporting_month, period_label
 from .ui import Card, label, set_table, table_view
+from .theme import dark_figure, DARK_SCORE_COLORS
+from .animations import ScoreRing
 
 LOGGER = logging.getLogger(__name__)
 METHOD = (
@@ -69,6 +72,8 @@ class ServiceDeskPage(QScrollArea):
     def __init__(self, store: LocalStore):
         super().__init__()
         self.store = store
+        self.live_cache = None
+        self.animator = None
         self.report = Report([], [], "")
         self.setWidgetResizable(True)
         content = QWidget()
@@ -80,6 +85,21 @@ class ServiceDeskPage(QScrollArea):
         layout.setSpacing(12)
         layout.addWidget(label("Service Desk", "title"))
         layout.addWidget(label("Basierend auf der Entwicklung der Service-KPIs", "muted"))
+        self.management_card = Card()
+        management = QVBoxLayout(self.management_card)
+        management.setContentsMargins(20, 18, 20, 18)
+        management.addWidget(label("Service Desk auf einen Blick", "section"))
+        self.management_basis = label("", "muted")
+        management.addWidget(self.management_basis)
+        self.management_metrics = QGridLayout()
+        self.management_metrics.setSpacing(12)
+        management.addLayout(self.management_metrics)
+        self.management_figure = Figure(figsize=(11, 4.6), dpi=100)
+        self.management_canvas = FigureCanvasQTAgg(self.management_figure)
+        self.management_canvas.setMinimumHeight(420)
+        management.addWidget(self.management_canvas)
+        layout.addWidget(self.management_card)
+        self.management_card.hide()
 
         self.hero = Card()
         hero = QHBoxLayout(self.hero)
@@ -90,7 +110,11 @@ class ServiceDeskPage(QScrollArea):
         summary.addWidget(label("Service Desk Performance", "section"))
         self.score_label = label("–", wrap=False)
         self.score_label.setAccessibleName("Aktueller Performance Score")
-        summary.addWidget(self.score_label)
+        self.score_ring = ScoreRing()
+        ring_layout = QVBoxLayout(self.score_ring)
+        self.score_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ring_layout.addWidget(self.score_label)
+        summary.addWidget(self.score_ring)
         self.status_label = label("", "section")
         summary.addWidget(self.status_label)
         self.change_label = label("", "section")
@@ -118,7 +142,7 @@ class ServiceDeskPage(QScrollArea):
             breakdown.addWidget(bar)
             self.area_widgets[area] = (value, bar)
         hero.addLayout(breakdown, 1)
-        layout.addWidget(self.hero)
+        layout.insertWidget(2, self.hero)
 
         self.empty_card = Card()
         empty = QVBoxLayout(self.empty_card)
@@ -195,8 +219,36 @@ class ServiceDeskPage(QScrollArea):
                                   else "Berechnung und Datengrundlage anzeigen")
 
     def refresh(self):
+        if self.animator:
+            self.animator.stop(self.management_canvas)
+            self.animator.stop(self.canvas)
         try:
-            self.report = build_report(self.store)
+            management = self.live_cache.management() if self.live_cache else load_management_report(self.store)
+            self.management_card.show()
+            self.management_basis.setText("Znuny Live · " + self.live_cache.batch.period.label if self.live_cache else
+                                          "Aktuellste lokale Exporte · Zeiträume je KPI unter «Berechnung und Datengrundlage»")
+            notes = [f"KPI {kpi}: {item.analysis.note}" for kpi, item in management.kpis.items()
+                     if item.analysis.references.get("invalid_values")]
+            if notes:
+                self.management_basis.setText(self.management_basis.text() + "\n" + "\n".join(notes))
+            while self.management_metrics.count():
+                item = self.management_metrics.takeAt(0)
+                item.widget().deleteLater()
+            for position, (name, value) in enumerate(management.metrics.items()):
+                card = Card()
+                box = QVBoxLayout(card)
+                box.addWidget(label(name, "muted"))
+                box.addWidget(label(value, "metric" if len(value) < 22 else "section"))
+                self.management_metrics.addWidget(card, position // 3, position % 3)
+            draw_management(self.management_figure, management)
+            dark_figure(self.management_figure)
+            self.management_canvas.draw()
+            if self.animator:
+                self.animator.chart(self.management_canvas)
+        except (DataError, OSError, ValueError, KeyError):
+            self.management_card.hide()
+        try:
+            self.report = self.live_cache.performance() if self.live_cache else build_report(self.store)
         except Exception as error:
             LOGGER.error("Service Desk calculation failed: %s", type(error).__name__)
             self.report = Report([], [], "Die Service-Desk-Auswertung konnte nicht berechnet werden. Bitte prüfen Sie die lokalen Dateien.")
@@ -212,17 +264,22 @@ class ServiceDeskPage(QScrollArea):
         self.context_label.setVisible(score is not None)
         if score:
             status, color = score_status(score.value)
+            color = DARK_SCORE_COLORS[color]
             self.score_label.setText(f"{number(score.value)} %")
-            self.score_label.setStyleSheet(f"font-size: 60px; font-weight: 600; color: {color};")
+            self.score_label.setStyleSheet("font-size: 29px; font-weight: 600; color: #e7ebef;")
+            self.score_ring.value = score.value
+            self.score_ring.color = color
+            if self.animator:
+                self.animator.run(self.score_ring, self.score_ring.set_progress, 350)
             self.status_label.setText(status)
             self.status_label.setStyleSheet(f"color: {color};")
             self.previous_label.setText("Vormonat: noch kein berechenbarer Score")
             self.change_label.setText("Erster berechenbarer Score")
-            self.change_label.setStyleSheet("color: #65727d;")
+            self.change_label.setStyleSheet("color: #a2afbe;")
             if report.previous_score:
                 previous = report.previous_score.value
                 delta = round(score.value - previous, 1)
-                arrow, tone = ("↑", "#23784c") if delta > 0 else (("↓", "#bd3838") if delta < 0 else ("→", "#65727d"))
+                arrow, tone = ("↑", "#59bd8b") if delta > 0 else (("↓", "#e08181") if delta < 0 else ("→", "#a2afbe"))
                 self.previous_label.setText(f"Vormonat: {number(previous)} %")
                 self.change_label.setText(f"{arrow} {'+' if delta > 0 else ''}{number(delta)} Prozentpunkte")
                 self.change_label.setStyleSheet(f"color: {tone};")
@@ -230,8 +287,8 @@ class ServiceDeskPage(QScrollArea):
                 text, bar = self.area_widgets[area]
                 text.setText(f"{number(value)} %")
                 bar.setValue(round(value * 10))
-                bar.setStyleSheet("QProgressBar { background: #edf0f2; border: none; border-radius: 3px; }"
-                                 f"QProgressBar::chunk {{ background: {score_status(round(value, 1))[1]}; border-radius: 3px; }}")
+                bar.setStyleSheet("QProgressBar { background: #35404d; border: none; border-radius: 3px; }"
+                                 f"QProgressBar::chunk {{ background: {DARK_SCORE_COLORS[score_status(round(value, 1))[1]]}; border-radius: 3px; }}")
             self.period_label.setText(f"Exportmonat {month_label(score.current.month)} · Vergleich: {month_label(score.previous.month)}")
             self.previous_heading.setText(month_label(score.previous.month))
             self.current_heading.setText(month_label(score.current.month))
@@ -239,7 +296,7 @@ class ServiceDeskPage(QScrollArea):
                 before, now = score.previous.values[key], score.current.values[key]
                 cells[0].setText(metric_text(key, before))
                 cells[1].setText(metric_text(key, now))
-                text, color = ("↑ Verbessert", "#23784c") if now < before else (("↓ Verschlechtert", "#bd3838") if now > before else ("→ Unverändert", "#65727d"))
+                text, color = ("↑ Verbessert", "#59bd8b") if now < before else (("↓ Verschlechtert", "#e08181") if now > before else ("→ Unverändert", "#a2afbe"))
                 cells[2].setText(text)
                 cells[2].setStyleSheet(f"color: {color};")
                 cells[3].setText(f"{number(score.components[key])} %")
@@ -255,13 +312,16 @@ class ServiceDeskPage(QScrollArea):
             for kpi, record in sorted(period.records.items()):
                 stamp = datetime.fromisoformat(record.export_timestamp)
                 rows.append([month_label(period.month), f"KPI {kpi}", stamp.strftime("%d.%m.%Y %H:%M"),
-                             month_label(record.reporting_month) if record.reporting_month else "Snapshot", record.timezone])
+                             period_label(record) if getattr(record, "period_start", None) else month_label(record.reporting_month) if record.reporting_month else "Snapshot", record.timezone])
         set_table(self.sources_table, pd.DataFrame(rows, columns=["Exportmonat", "KPI", "Exportzeitpunkt", "Berichtszeitraum", "Zeitzone"]))
         self.sources_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.period_issues.setText("\n".join(f"{month_label(period.month)}: {period.issue}" for period in report.periods if period.issue))
 
     def _draw_history(self):
         draw_score_history(self.figure, self.report)
+        dark_figure(self.figure)
         self.history_note.setText("Exportmonate · Erster berechenbarer Score; für einen Verlauf werden weitere vollständige Monate benötigt."
                                   if len(self.report.scores) == 1 else "Exportmonate · Lücken kennzeichnen fehlende oder nicht vergleichbare Datenstände.")
         self.canvas.draw()
+        if self.animator:
+            self.animator.chart(self.canvas)

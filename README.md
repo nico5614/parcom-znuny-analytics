@@ -2,85 +2,85 @@
 
 ## Beschreibung
 
-Windows-Desktopanwendung zur lokalen Auswertung von Service-KPIs der PBX-Abteilung aus Znuny-Excel-Exporten. Der funktionsfähige Prototyp nutzt eine native PySide6-Oberfläche mit eingebetteten Matplotlib-Diagrammen.
+Native Windows-Anwendung für die Service-KPIs von **PBX** und **PBX Intern**, entwickelt für ParCom Systems AG. Version **1.0** verbindet den bisherigen Excel-Import mit lesendem Znuny-Zugriff, einer dunklen Oberfläche und gemeinsam berechneten Dashboards und PDF-Berichten.
+
+**Freigabestatus:** `codex/version-1-0` enthält einen Prüfbuild. Echte Znuny-Anmeldung und Abnahme auf einem sauberen Windows-System sind noch offen. Es gibt daher noch keine Produktionsfreigabe `v1.0.0` auf `main`. Siehe [VALIDATION.md](VALIDATION.md).
 
 ## Funktionen
 
-- Ein skalierbares Hauptfenster mit **Start**, **Upload**, **Dashboard**, **Service Desk** und **Download**; Standardgrösse 1280 × 800, Mindestgrösse 1050 × 650.
-- Mehrfachimport von `.xlsx`-Dateien mit Prüfung von Dateiname, Exportdatum, Uhrzeit, Zeitzone und Arbeitsmappe.
-- Dauerhafte lokale Kopien und SHA-256-Duplikatprüfung. Ein identischer Inhalt mit derselben KPI und demselben Exportzeitpunkt wird nicht erneut importiert. Ein neuer Exportzeitpunkt bleibt als eigener Datenstand erhalten, auch wenn sich die Ticketliste nicht geändert hat.
-- Automatische Auswahl des neuesten Exports je KPI und Berichtsmonat beziehungsweise des neuesten Snapshots; ältere Berichtsmonate und Snapshots bleiben auswählbar.
-- Kennzahlen, Diagramme und Detailtabellen für alle sieben KPIs. Beim Start ist keine KPI vorausgewählt.
-- Trendbasierter Service Desk Performance Score mit transparenter Berechnung, Teilbereichen, Monatsverlauf und Erklärung der Veränderungen.
-- Unabhängige Berichtsauswahl unter **Download**, einschliesslich älterer Berichtsmonate und Snapshots. Dashboard und Service Desk müssen vorher nicht geöffnet werden.
-- PDF-Berichte mit denselben Kennzahlen, Diagrammen, Vergleichswerten und Tabellenmarkierungen wie im Dashboard; vollständige Detailtabellen werden bei Bedarf auf mehrere Seiten verteilt.
-- Aggregierter Service-Desk-PDF-Bericht mit Management-Kennzahlen, bestehendem Performance Score, Verläufen und transparenter Datenbasis; ohne Ticketdetails oder Kundendaten.
-- Anklickbare Ticketnummern werden in die Zwischenablage kopiert; eine kurze Meldung bestätigt das Kopieren.
-- Verständliche Leerzustände und Fehlermeldungen sowie lokale, rotierende Protokolldateien.
+- Maximierter Start mit persönlicher Anmeldung oder **Offline fortfahren**; native Windows-Fenstersteuerung.
+- Navigation **Übersicht**, **KPIs**, **Import**, **Berichte** sowie **Info** und **Abmelden**.
+- Skalierbarer Dark Mode, kurze Seiten-, Zahlen-, Diagramm- und Score-Animationen. **Animationen reduzieren** unter Info bleibt nach Neustart gespeichert.
+- HTTPS-Abfragen im Hintergrund; Fehler lassen lokale Auswertungen verfügbar.
+- Zeiträume 7/30 Tage, 3/6/12 Monate oder benutzerdefiniert, maximal zwölf Kalendermonate. Nach Anmeldung werden 30 Tage geladen; weitere Abfragen erfolgen über **Aktualisieren**.
+- Excel-Mehrfachimport, dauerhafte Kopien, SHA-256-Duplikatprüfung, Bestandsübersicht und bestätigtes Löschen lokaler Datensätze.
+- Gemeinsame Berechnungen für Excel, Live-Daten, Dashboard und PDF. Unabhängige Berichtsauswahl ohne vorherigen Dashboard-Aufruf.
+- Management-Übersicht mit Ticketvolumen, Backlog, Eskalationen, Servicezeiten und transparentem Performance Score.
 
 ## Unterstützte KPIs
 
-| KPI | Auswertung | Zeitraum |
+| KPI | Auswertung | Zeitbezug |
 | --- | --- | --- |
-| 1 | Tagesbalken mit Durchschnittslinie und beschrifteten Höchstwerten; orange Mengenkennzahl ohne Warnbewertung | Monat |
-| 2 | Tagesbalken mit Durchschnittslinie und beschrifteten Höchstwerten; neutrale Mengenbewertung | Monat |
-| 3 | Altersklassen mit Amber/Rot für ältere Tickets; dezente Zeilenmarkierungen und älteste Tickets fett | Snapshot |
-| 4 | Donut mit Eskalationsquote und Anzahl; eskalierte Tickets dezent rot | Snapshot |
-| 5 | Histogramm mit Median und Durchschnitt; menschenlesbare Zeiten; Perzentil-/Höchstwertmarkierung | Monat |
-| 6 | Histogramm mit Median und Durchschnitt; menschenlesbare Zeiten; Perzentil-/Höchstwertmarkierung | Monat |
-| 7 | Altersklassen, markierte alte Tickets und fett hervorgehobene älteste Tickets | Snapshot |
+| 1 | Neue Tickets, Tagesverteilung und Tagesdurchschnitt | Zeitraum |
+| 2 | Geschlossene Tickets, Tagesverteilung und Tagesdurchschnitt | Zeitraum |
+| 3 | Offene Tickets inklusive wartender Tickets und Altersverteilung | Aktueller Snapshot |
+| 4 | Erstantwort-Eskalationen, Donut mit Anzahl und Quote, Nachverfolgung | Aktueller Snapshot |
+| 5 | Reaktionszeit: Median, Durchschnitt, Verteilung, langsamste Tickets | Geschlossene Tickets im Zeitraum |
+| 6 | Lösungszeit: Median, Durchschnitt, Verteilung, längste Zeiten | Geschlossene Tickets im Zeitraum |
+| 7 | Wartende Tickets, Alter und Nachverfolgung | Aktueller Snapshot |
 
-Der Berichtsmonat ist der **vorherige Kalendermonat des Exportdatums**, auch beim Jahreswechsel. Ein Export vom 29.09.2026 gehört zu August 2026. Snapshot-KPIs zeigen den tatsächlichen Datenstand mit Datum und Uhrzeit aus dem Dateinamen. Sie haben eine Datenstandsauswahl anstelle einer Monatsauswahl.
+Intern werden Minuten verwendet; die Anzeige formatiert Tage, Stunden und Minuten einheitlich. **0 Minuten bleiben erhalten; fehlende Werte bleiben fehlend.** REST-`Age` wird von Sekunden in volle Minuten umgerechnet. Unlesbare Werte werden gemeldet. Alterstabellen sind absteigend sortiert, Ticketnummern kopierbar.
 
-Das Einzel-KPI-Dashboard zeigt einen Verlauf bis zum ausgewählten Monat beziehungsweise Snapshot sowie den Vergleich zum unmittelbar vorherigen vorhandenen Datenstand. Für KPI 5/6 steht der Median im Vordergrund; der Durchschnitt wird ergänzend dargestellt. Bei Bestands-KPIs wird auch die Anzahl der Tickets über 30 Tage gezeigt. Ein einzelner Datenstand erzeugt keine behauptete Entwicklung. Nicht lesbare oder wegen ihrer Zeitzone nicht vergleichbare historische Dateien werden als Lücken gemeldet. Die bestehenden Regeln des Service-Desk-Scores bleiben davon getrennt unverändert.
+Die Altersklassen verwenden exakte Grenzen bei 7, 14 und 30 Tagen. Bis 14 Tage bleiben neutral, über 14 bis 30 Tage amber, über 30 Tage rot. Dies sind Aufmerksamkeitshinweise, keine SLA-Ziele. Bei Zeitkennzahlen markiert das 75. Perzentil mit linearer Interpolation auffällige Werte; bei unterschiedlichen Werten erscheinen Höchstwerte rot und fett. Konstante Verteilungen erhalten keine farblichen Ausreisser. Tagesdurchschnitte berücksichtigen alle Kalendertage des abgebildeten Diagrammzeitraums, auch Tage ohne Tickets.
 
-Der Tagesdurchschnitt von KPI 1/2 berücksichtigt alle Kalendertage des im Diagramm abgebildeten Zeitraums, einschliesslich Tagen ohne Tickets. Tage über dem Durchschnitt und Höchstwerte verwenden dunklere Orangetöne. Die Altersklassen «0–7 / 8–14 / 15–30 / >30 Tage» verwenden weiterhin die exakten Grenzen bei 7, 14 und 30 Tagen; beispielsweise gehört 7 Tage plus 1 Minute zur zweiten Klasse. Amber markiert über 14 bis 30 Tage, Rot über 30 Tage. Dies sind Aufmerksamkeitshinweise, keine erfundenen SLA-Grenzen.
+Eskalationen bedeuten ausschliesslich `FirstResponseTimeEscalation == 1`; die Quote bezieht sich auf alle Tickets in KPI 4. Fehlende Felder werden als unbekannt gemeldet, nicht auf 0 gesetzt. Bei fehlenden Feldern ist die Quote nur für die vorhandenen Informationen aussagekräftig.
 
-Für KPI 5/6 wird das 75. Perzentil aus den gültigen Minutenwerten des gewählten Datensatzes mit linearer Interpolation berechnet. Werte darüber werden amber markiert; die höchsten Werte bei einer nicht konstanten Verteilung rot. Alle Höchstwerte sind fett. Bei ausschliesslich gleichen Werten gibt es keine farbliche Ausreissermarkierung. Nullwerte bleiben enthalten. Die Regeln und das konkrete Perzentil stehen direkt über der Tabelle und im PDF.
+## Znuny-Anmeldung und Live-Daten
 
-Eine gemeinsame Zeitformatierung wird in Kennzahlen, Tabellen, Diagrammen, Vergleichen, Service Desk und PDFs verwendet: beispielsweise `83 → 1 h 23 min`, `1823 → 1 d 6 h 23 min`, `5874 → 4 d 1 h 54 min`. Bruchteile einer Minute werden auf eine Dezimalstelle gerundet angezeigt. Berechnungen verwenden weiterhin numerische Minutenwerte.
+Festes Ziel:
 
-Die Anwendung verwendet die erste Tabelle der Arbeitsmappe, entfernt Leerzeichen an den Spaltennamen und benötigt keine feste Spaltenreihenfolge. Die Znuny-Abfrage muss bereits die jeweilige PBX-Ticketmenge liefern; die Anwendung filtert diese nicht nochmals nach Queue, Status oder Kalendermonat.
+```text
+https://znuny.parcom.ch/otrs/nph-genericinterface.pl/Webservice/GenericTicketConnectorREST
+```
 
-Dateinamen müssen diesem Muster entsprechen; der beschreibende Teil darf variieren:
+Erlaubt sind nur `SessionCreate`, `SessionDelete`, `TicketSearch` und `TicketGet` mit `Extended=1`. Keine Ticket-Schreiboperationen, Datenbankverbindung oder Automatisierung der Znuny-Weboberfläche. Die Queues stehen zentral in `znuny.py`.
+
+REST-Mapping: `POST /Session`, `DELETE /Session/<ID>`, `POST /Ticket/Search`, `GET /Ticket/<TicketID>`. TicketGet verwendet eine Anfrage pro Ticket-ID. Windows-Zertifikate werden über truststore eingebunden. TLS-Zertifikatsprüfung bleibt aktiv; Umleitungen werden nicht verfolgt. Persönliche Znuny-Berechtigungen gelten weiterhin.
+
+Benutzername und Passwort werden nicht gespeichert. Das Passwortfeld wird beim Absenden geleert; die Session-ID bleibt ausschliesslich im Arbeitsspeicher. Abmelden, Benutzerwechsel, Wechsel zu Offline und normales Schliessen versuchen `SessionDelete`. Bei Prozessabbruch oder unerreichbarem Server ist die serverseitige Bereinigung nicht garantiert.
+
+Grün bedeutet gültige Sitzung und letzte Anfrage erfolgreich, Gelb laufende Verbindung/Aktualisierung, Rot keine nutzbare Verbindung. Anmeldefehler, abgelaufene Sitzung und Netzwerkfehler haben unterschiedliche Meldungen. Über **Verbinden** beziehungsweise **Neu verbinden** ist eine erneute Anmeldung möglich.
+
+Normale Requests verwenden 5 Sekunden Verbindungs- und 30 Sekunden Lese-Timeout, Logout 1 beziehungsweise 2 Sekunden. Keine automatischen Endlosversuche. TicketGet liest Gruppen von höchstens 50 IDs. Erreicht eine Suche 10’000 Treffer, wird der Lauf mit Hinweis abgebrochen, statt unvollständige Zahlen zu übernehmen. Fehler erhalten den vorherigen Cache.
+
+Zeitfilter gelten für erstellte beziehungsweise geschlossene Tickets. KPI 3/4/7 zeigen immer den aktuellen Bestand. Eine heute gestellte August-Abfrage erzeugt keinen rückwirkenden August-Snapshot.
+
+## Excel-Import
+
+Unter **Import** eine oder mehrere `.xlsx`-Dateien auswählen. Dateiname, Zeitstempel, Zeitzone und Arbeitsmappe werden geprüft. Verwendet wird die erste Tabelle; Spaltennamen werden getrimmt, ihre Reihenfolge ist beliebig. Beispiel:
 
 ```text
 KPI_7___PBX__Wartende_Tickets_Created_2026-09-29_10-52_TimeZone_Europe_Zurich.xlsx
 ```
 
-Zeitzonen werden als IANA-Zonen interpretiert, beispielsweise `Europe_Zurich` als `Europe/Zurich`. Die Abhängigkeit `tzdata` stellt diese Informationen auch unter Windows bereit.
+Für KPI 1/2/5/6 ist der Berichtsmonat der Kalendermonat vor dem Exportdatum. Je KPI/Monat wird zunächst der neueste Export gewählt; ältere Monate bleiben auswählbar. KPI 3/4/7 verwenden Snapshots, deren ältere Datenstände ebenfalls auswählbar bleiben. Excel-Dateien müssen bereits die passende Ticketmenge enthalten; sie werden nicht nachträglich wie eine REST-Suche gefiltert.
 
-Benötigte Spalten:
-
-| KPI | Spalten |
+| KPI | Benötigte Spalten |
 | --- | --- |
 | 1 | `Ticket#`, `Titel`, `Erstellt`, `Status` |
 | 2 | `Ticket#`, `Titel`, `Schließzeit`, `Status` |
-| 3, 7 | `Ticket#`, `Alter`, `Titel`; optional: `Status`, `Priorität` |
+| 3, 7 | `Ticket#`, `Alter`, `Titel`; optional `Status`, `Priorität` |
 | 4 | `Ticket#`, `Titel`, `Alter`, `Status`, `Priorität`, `FirstResponseTimeEscalation`, `FirstResponseTimeDestinationDate` |
 | 5 | `Ticket#`, `Titel`, `Erstantwortzeit in Minuten` |
 | 6 | `Ticket#`, `Titel`, `Lösungszeit in Minuten` |
 
-Altersangaben wie `31 m`, `2 h 45 m` und `446 d 18 h` werden in Minuten umgerechnet. «Älter als» ist eine strikte Grenze: Genau sieben Tage zählen nicht zu «älter als 7 Tage». Nicht lesbare Alters- oder Datumswerte werden sichtbar ausgewiesen. Fehlende, negative oder unendliche Minutenwerte werden ausgeschlossen und gemeldet; **0 Minuten bleiben enthalten**. Eskalationswerte müssen 0 oder 1 sein; 1 bedeutet eskaliert. Tabellen mit Zeitkennzahlen sind absteigend sortiert; Alterstabellen zeigen die ältesten Tickets zuerst.
+Identischer Inhalt mit derselben KPI und demselben Exportzeitpunkt wird nicht erneut importiert. Ein neuer Exportzeitpunkt bleibt ein eigener Datenstand. Die Bestandsübersicht zeigt vorhandene und fehlende KPIs. Löschen entfernt nach Bestätigung nur die lokale Kopie und den Indexeintrag; die Originaldatei bleibt erhalten.
 
-Bei KPI 3 und 7 sind `Status` und `Priorität` zusätzliche Tabellenangaben. Fehlen diese Spalten, funktionieren Kennzahlen und Altersdiagramm weiterhin. Die fehlenden Angaben erscheinen als «–» in der Tabelle; Dashboard und PDF weisen darauf hin. Status und Priorität werden nicht aus anderen Feldern abgeleitet.
+## Service Desk Performance und Historie
 
-## Service Desk Performance
+**100 % bedeutet keine Verschlechterung gegenüber dem Vergleichsmonat**, keine SLA-Erfüllung oder absolute Servicequalität. Auch ein unverändert hoher Bestand kann 100 % ergeben. Ein steigender Score kann eine verlangsamte Verschlechterung bedeuten. Vorher-/Nachher-Werte und Teilbereiche werden deshalb offengelegt. Keine erfundenen SLA-Ziele.
 
-Das Register **Service Desk** bewertet die Entwicklung vergleichbarer Datenstände. **100 % bedeutet keine Verschlechterung gegenüber dem Vergleichsmonat.** Der Score misst weder absolute Servicequalität noch SLA-Erfüllung. Auch ein unverändert hoher Ticketbestand kann 100 % ergeben. Ein steigender Score kann auch eine verlangsamte Verschlechterung bedeuten; die konkreten Veränderungen zeigen die Vorher-/Nachher-Werte. Es gibt keine erfundenen SLA-Zielwerte.
-
-Ein vollständiger Datenstand besteht aus allen sieben KPIs eines **Exportmonats**:
-
-- KPI 1, 2, 5 und 6 liefern den jeweiligen Vormonat als Berichtszeitraum; pro KPI wird der neueste Export verwendet.
-- KPI 3, 4 und 7 müssen gemeinsam für den neuesten vorhandenen Snapshot-Tag des Exportmonats vorliegen. Je KPI zählt der neueste Export dieses Tages.
-- Beispiel: Der Score für Oktober vergleicht die im Oktober exportierten September-Zeitkennzahlen und Oktober-Snapshots mit den entsprechenden Daten aus dem Exportmonat September. Exportzeitpunkte und Berichtszeiträume stehen unter **Berechnung und Datengrundlage**.
-- Nur aufeinanderfolgende vollständige Exportmonate mit identischen Zeitzonen werden verglichen. Unterschiedliche Exporttage und Änderungen am Ticketmix können den Vergleich beeinflussen. Mehrere Exporte im selben Monat bilden keine zusätzliche Historie.
-
-Ein einzelner vollständiger Datenstand erzeugt keinen Score. Zwei vergleichbare Monatsdatenstände ergeben den ersten Score; drei ergeben erstmals zwei Score-Punkte und eine Veränderung gegenüber dem Vormonat. Fehlende Monate werden im Diagramm nicht verbunden. Ein unvollständiger neuester Exportmonat wird als solcher angezeigt; ein älterer Score wird nicht als aktueller ausgegeben.
-
-### Formel und Gewichtung
-
-Alle verwendeten Teilkennzahlen werden bei sinkenden Werten günstiger bewertet:
+Die bestehende Formel bleibt unverändert:
 
 ```text
 Teilscore = 100 %, wenn aktuell ≤ vorher
@@ -89,139 +89,108 @@ Bereichsscore = Mittel seiner Teilscores
 Gesamtscore = Mittel der fünf Bereichsscores
 ```
 
-Von 0 auf 0 und von einem positiven Wert auf 0 ergibt 100 %; von 0 auf einen positiven Wert ergibt 0 %. Verbesserungen sind bei 100 % gedeckelt und gleichen Verschlechterungen anderer Teilkennzahlen nicht aus. Beispiel: Steigt eine Zeit von 60 auf 120 Minuten, beträgt ihr Teilscore 50 %. Bleibt sie gleich oder sinkt, beträgt er 100 %.
-
-| Bereich | Grundlage | Gewicht am Gesamtscore |
+| Bereich | Grundlage | Gewicht |
 | --- | --- | --- |
-| Backlog | Anzahl offener Tickets und Anteil über 30 Tage (KPI 3) | je 10 %, zusammen 20 % |
-| Eskalationen | Anteil `FirstResponseTimeEscalation == 1` an KPI 4 | 20 % |
-| Reaktionszeit | Median der Minutenwerte aus KPI 5 | 20 % |
-| Lösungszeit | Median der Minutenwerte aus KPI 6 | 20 % |
-| Wartende Tickets | Anzahl und Anteil über 30 Tage (KPI 7) | je 10 %, zusammen 20 % |
+| Backlog | Anzahl offener Tickets und Anteil über 30 Tage | je 10 % |
+| Eskalationen | Erstantwort-Eskalationsquote | 20 % |
+| Reaktionszeit | Median einschliesslich Nullwerte | 20 % |
+| Lösungszeit | Median einschliesslich Nullwerte | 20 % |
+| Wartende Tickets | Anzahl und Anteil über 30 Tage | je 10 % |
 
-Die bereits im KPI-Dashboard verwendete Altersgruppe über 30 Tage ist eine Vergleichsgrösse, **kein SLA-Ziel**. KPI 3 enthält auch wartende Tickets. KPI 1 und 2 liefern ausschliesslich Kontext: neue Tickets, geschlossene Tickets und Abschlussverhältnis (`geschlossen / neu`). Bei null neuen Tickets bleibt das Verhältnis unbestimmt. Diese Kontextwerte beeinflussen den Score nicht.
+Von 0 auf 0 ergibt 100 %, von 0 auf einen positiven Wert 0 %. Verbesserungen sind bei 100 % gedeckelt und gleichen Verschlechterungen anderer Teilkennzahlen nicht aus. KPI 1/2 sind Kontext ohne Score-Gewicht. Abschlussverhältnis und Ticketdifferenz werden nur für denselben Zeitraum berechnet; bei null neuen Tickets ist das Verhältnis unbestimmt. Ticketdifferenz bedeutet geschlossen minus neu.
 
-Null-Minuten-Werte bleiben enthalten. Fehlende Dateien oder benötigte Spalten sowie ungültige Alters-, Eskalations- oder Minutenwerte verhindern den Score für die betreffende Periode. Leere Bestandslisten ergeben Anzahl und Anteil 0; eine leere Zeitmessung ergibt keinen Median und daher keinen Score. Es werden keine fehlenden Bereiche durch andere ersetzt.
+Alle sieben KPIs müssen vorliegen. Eine Score-Periode entspricht dem Erfassungs-/Exportmonat: monatliche KPIs beziehen sich auf dessen vollständigen Vormonat, Snapshot-KPIs auf den tatsächlichen neuesten gemeinsamen Snapshot-Tag. Verglichen werden nur vollständige aufeinanderfolgende Monate mit derselben Zeitzone. Zwei Perioden liefern den ersten Score, drei erstmals eine Veränderung zum vorherigen Score. Lücken werden nicht verbunden; ein unvollständiger neuester Stand wird nicht durch einen älteren Score verdeckt. Unbekannte Alters-/Zeitwerte verhindern einen scheinpräzisen Score. Ein leerer Bestand ist 0; eine leere Zeitmessung hat keinen Median.
 
-Der Gesamtscore und die Veränderung werden auf eine Dezimalstelle gerundet. 0,0 Prozentpunkte gelten als unverändert. Die Statusfarben beziehen sich auf den dargestellten **Trendindex**: ab 90 % grün / «Sehr gut», ab 75 % gelb / «Gut», ab 60 % orange / «Aufmerksamkeit erforderlich», darunter rot / «Kritisch». Die Aufschlüsselung zeigt jeden Vorher-/Nachher-Wert, seine Entwicklung und seinen Teilscore.
+Live-Verläufe enthalten nur tatsächlich erhobene Snapshots. Monatliche Verlaufswerte entstehen nur für vollständig abgefragte Kalendermonate. Teilmonate werden nicht als vollständige Monatsvergleiche ausgegeben. Excel- und Live-Historien bleiben nach Quelle getrennt. Alte Live-Stände enthalten nur Aggregate, Ticketdetails ausschliesslich der letzte erfolgreiche Lauf.
 
-Die Historie wird lokal aus den importierten Dateien rekonstruiert und bleibt nach einem Neustart erhalten. Der PDF-Export wird unabhängig unter **Download** ausgewählt.
+Score und Veränderung werden auf eine Dezimalstelle gerundet. Ab 90 % **Sehr gut**, ab 75 % **Gut**, ab 60 % **Aufmerksamkeit erforderlich**, darunter **Kritisch**. Unterschiedliche Snapshot-Tage und Änderungen am Ticketmix können Vergleiche beeinflussen; die Datengrundlage bleibt sichtbar.
 
-## Berichtszentrale und PDF-Export
+## Berichte und PDF
 
-Unter **Download** zuerst eine KPI oder **Service Desk – Gesamtübersicht** auswählen. Für Monats-KPIs erscheinen nur vorhandene Berichtsmonate, für Snapshot-KPIs nur vorhandene Datenstände. Der neueste Eintrag ist standardmässig ausgewählt; ältere Einträge bleiben verfügbar. Die Auswahl im Dashboard beeinflusst diese Auswahl nicht.
+Unter **Berichte** unabhängig vom Dashboard eine KPI oder **Service Desk – Gesamtübersicht** wählen. Die Quelle wird oben gewählt. Lokale Berichtsmonate/Snapshots beziehungsweise der zuletzt geladene Live-Zeitraum stehen entsprechend zur Verfügung.
 
-Einzel-KPI-Berichte enthalten die ausgewählte Auswertung, die verbesserten Diagramme, historische Entwicklung bis zum gewählten Datenstand, den Vergleich zum vorherigen verfügbaren Datenstand und sämtliche Ticketdetails mit denselben Hervorhebungen. Berechnungen und Formatierung werden mit der Oberfläche geteilt. Der Dateiname enthält KPI und Berichtsmonat beziehungsweise Snapshot-Zeitpunkt, etwa `KPI_5_Reaktionszeit_2026-09.pdf`.
+Einzelberichte enthalten Kennzahlen, finales Diagramm ohne Animation, Quelle, Zeitraum/Datenstand, Verlauf, Vergleich, Details und Erstellungszeitpunkt. Management-Berichte benötigen sieben gültige KPI-Auswertungen und enthalten **keine Ticketnummern, Titel oder personenbezogenen Ticketdetails**. Fehlende Score-Historie wird ausdrücklich ausgewiesen. Export über Qt und Speichern-Dialog; bestehende PDFs werden erst nach erfolgreicher Erstellung ersetzt.
 
-**Service Desk – Gesamtübersicht** benötigt gültige aktuelle Datensätze für alle sieben KPIs. Fehlt eine KPI oder ein benötigter Alters-/Zeitwert, bleibt der Export deaktiviert. Ein vollständiger einzelner Datenstand genügt für den Management-Bericht; der Performance Score bleibt ohne ausreichende Historie ausdrücklich nicht verfügbar. Die Score-Formel wird nicht verändert.
+## Installation und Anwendung starten
 
-Der Management-Bericht verwendet die jeweils aktuellste vorhandene Datei je KPI. Er enthält neue und geschlossene Tickets, offene und wartende Tickets einschliesslich Beständen über 30 Tage, Eskalationsquote, Zeitmediane, Vergleichswerte und Verläufe. Abschlussverhältnis und Ticketdifferenz werden nur bei übereinstimmenden Berichtsmonaten von KPI 1 und 2 angegeben; bei null neuen Tickets ist das Verhältnis nicht berechenbar. Ticketdifferenz bedeutet geschlossene minus neue Tickets. Die Datenbasis nennt für jede KPI Berichtszeitraum, Exportzeitpunkt und Zeitzone; der Score nennt seinen eigenen Vergleichszeitraum.
+Nach Freigabe genügt **ParCom_Znuny_Analytics_Setup_1.0.0.exe**. Python, Qt und Bibliotheken werden mitgeliefert; die Installation benötigt keine Internetverbindung. Live-Daten benötigen danach Zugang zu Znuny.
 
-Der Service-Desk-Bericht enthält **keine Ticketnummern, Titel, Kundendaten oder personenbezogenen Ticketdetails**. Er erhält den Standardnamen `Service_Desk_<Erstellungsdatum>.pdf`. Alle Berichte werden mit Qt über den bestehenden Speichern-Dialog erzeugt. Es wird keine zusätzliche Bibliothek benötigt.
+Der dunkle Installer bietet Installationspfad, aktuellen Benutzer beziehungsweise alle Benutzer mit Administratorrechten und eine optionale Desktop-Verknüpfung. Standardziel ist der Windows-Programmordner unter `ParCom\ParCom Znuny Analytics`. Startmenü und Windows-Apps-Eintrag werden angelegt. Start über die Verknüpfung oder `ParCom_Znuny_Analytics.exe` im Installationsordner, ohne Konsolenfenster.
+
+PyInstaller verwendet **onedir**: Die Anwendungs-EXE benötigt ihren benachbarten `_internal`-Ordner. Zur Verteilung den vollständigen Installer verwenden. Deinstallation über Windows **Installierte Apps** oder Startmenü; Daten unter `%LOCALAPPDATA%` bleiben für eine Neuinstallation erhalten.
+
+**Signierung:** Dateimetadaten nennen Nico Köchli als Herausgeber. Der Prüfbuild ist nicht digital signiert. Windows kann «Unbekannter Herausgeber» oder eine SmartScreen-Warnung anzeigen. Metadaten ersetzen kein Code-Signing-Zertifikat.
 
 ## Entwicklungsumgebung
 
-- Windows 10/11 mit Python **3.12 oder neuer**
-- PySide6, pandas, openpyxl, Matplotlib, tzdata
-- pytest für automatisierte Tests; QtTest und QtPdf sind in PySide6 enthalten
-
-In PowerShell im Projektordner:
+Windows x64, Python **3.14.8** stable, PySide6 **6.11.2**, PyInstaller **6.22.3**, Inno Setup **7.1.0**. Exakte Python-Pakete: `requirements-lock.txt`. Allgemeine Abhängigkeiten: `requirements.txt`; Build-Einstieg: `requirements-build.txt`.
 
 ```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+py -3.14 -m venv .venv314
+.\.venv314\Scripts\python.exe -m pip install -r requirements-lock.txt
+.\.venv314\Scripts\python.exe start.py
 ```
 
-Es werden keine Datenbank, kein Webserver und keine Qt-Designer-Dateien verwendet. Die Anwendung benötigt nach Installation der Abhängigkeiten keine Internetverbindung.
-
-## Anwendung starten
+## Tests und Windows-Build
 
 ```powershell
-.\.venv\Scripts\python.exe start.py
+New-Item -ItemType Directory -Path .validation -Force
+.\.venv314\Scripts\python.exe -m pytest -q -o cache_dir=.validation/cache
+.\scripts\build_windows.ps1
 ```
 
-Alternativ:
+Inno Setup 7 muss installiert sein; einen abweichenden Compilerpfad über `-IsccPath` angeben. Das Skript prüft Python 3.14 stable, führt alle Tests aus, erzeugt Windows-Ressourcen, PyInstaller-Anwendung und Installer. Ausgabe: `dist\release\ParCom_Znuny_Analytics_Setup_1.0.0.exe` und `SHA256SUMS.txt`. Der onedir-Build liegt in `dist\ParCom_Znuny_Analytics`. Beim Benutzer werden weder Python noch Pakete nachgeladen.
 
-```powershell
-.\.venv\Scripts\python.exe -m parcom_analytics
-```
+Tests verwenden synthetische Daten und temporäre Excel-Dateien. Echte Netzwerkzugriffe sind in pytest gesperrt; REST-Antworten werden simuliert. Geprüft werden Berechnungen, Import, Persistenz, Historie, Score, Fehlerfälle, Sitzungen, Hintergrundverarbeitung, Cache, Datenschutz, Qt-Oberfläche, Animationen und PDF-Inhalte. Das ersetzt keine echte Serverabnahme oder einen Test auf sauberem Windows.
 
-1. Unter **Upload** einen oder mehrere Znuny-Exporte auswählen.
-2. Unter **Dashboard** die KPI und bei Monats-KPIs den verfügbaren Berichtsmonat auswählen.
-3. Unter **Service Desk** bei ausreichender Historie den Performance Score und seine Herleitung prüfen.
-4. Unter **Download** unabhängig die gewünschte Auswertung und den Zeitraum auswählen und mit **Als PDF exportieren** speichern. Dieser Schritt funktioniert auch direkt nach dem Upload oder einem Neustart.
-
-Ein zweiter gleichzeitiger Anwendungsstart wird verhindert, damit sich Schreibzugriffe auf den Dateiindex nicht überschneiden. Während eines Imports bleibt die Oberfläche bedienbar; die Anwendung kann nach Abschluss des Imports geschlossen werden.
-
-## Tests
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q
-```
-
-Die Tests verwenden ausschliesslich synthetische DataFrames und temporär erzeugte Excel-Dateien. Sie prüfen Dateinamen, Zeitzonen, Monatswechsel, Altersparser, Duplikate, Dateikopien, Neustart-Persistenz, beschädigte Indizes, Spaltenprüfungen und alle KPI-Berechnungen.
-
-Qt-Integrationstests prüfen Navigation, konstante Fenstergrösse, Leerzustände, Import über den Upload-Button, Monats- und Snapshot-Auswertungen, PDF-Freigabe sowie ein- und mehrseitige PDF-Inhalte. Sie laufen ohne sichtbares Testfenster; native Dateidialoge werden dabei durch temporäre Testpfade ersetzt.
-
-Zusätzliche Berichtstests prüfen Altersklassen und Markierungsgrenzen, gemeinsame Zeitformatierung, Perzentile und Höchstwerte, Tagesdurchschnitte, Donut-Quote, Referenzlinien, verfügbare Exportzeiträume, die unabhängige Download-Auswahl, Zwischenablage, Neustart und vollständige Management-Daten. PDF-Tests vergleichen die Werte mit der zentralen Analyse und prüfen, dass im Management-Bericht keine synthetischen Ticket-Identifikatoren oder Titel vorkommen.
-
-Score-Tests prüfen Formel und Gewichtung, Nullwerte, Statusgrenzen, historische Vergleichbarkeit, Jahreswechsel, Lücken, ungültige Daten, die Auswahl neuester Exporte und den fehlenden Einfluss von KPI 1/2. Der Service-Desk-Integrationstest importiert drei synthetische Monatsdatenstände, prüft die automatische Aktualisierung, den Verlauf, beide Fenstergrössen und die Wiederherstellung nach einem Neustart.
-
-## Datenspeicherung
-
-Die Anwendung erstellt automatisch:
+## Datenspeicherung und Datenschutz
 
 ```text
 %LOCALAPPDATA%\ParCom\ZnunyAnalytics\
-├── data\
-│   ├── kpi_1\
-│   ├── kpi_2\
-│   ├── kpi_3\
-│   ├── kpi_4\
-│   ├── kpi_5\
-│   ├── kpi_6\
-│   └── kpi_7\
-├── exports\
-├── logs\
-│   └── app.log
-└── index.json
+├── data\kpi_1\ … kpi_7\   Excel-Kopien
+├── exports\               Vorgeschlagener PDF-Speicherort
+├── logs\app.log            Rotierende technische Protokolle
+├── index.json              Excel-Index, Hash und Zeitbezug
+├── live-cache.json         Letzter Live-Stand und historische Aggregate
+└── settings.ini            Oberflächenpräferenzen
 ```
 
-Die Originaldatei wird kopiert und darf danach aus dem Downloadordner entfernt werden. `index.json` enthält Originalname, lokalen Namen und relativen Speicherpfad, SHA-256, KPI, Exportzeitpunkt mit UTC-Abweichung, Zeitzone und gegebenenfalls Berichtsmonat. Der Index wird atomar ersetzt.
+Originaldateien können nach Import entfernt werden. Index und Cache werden atomar geschrieben. Ein beschädigter Excel-Index wird als `index.corrupt-<Zeitpunkt>.json` gesichert; Arbeitsmappen bleiben erhalten. Ein beschädigter Live-Cache wird gemeldet, ohne Excel-Daten zu verändern. Unter Import kann der Live-Cache samt Historie nach Bestätigung gelöscht werden.
 
-Ein beschädigter Index wird unter `index.corrupt-<Zeitpunkt>.json` gesichert; die Anwendung zeigt einen Hinweis und legt einen neuen Index an. Vorhandene Arbeitsmappen bleiben erhalten. Zur Wiederaufnahme können sie mit einem gültigen Znuny-Dateinamen erneut importiert werden. Ein fehlender lokaler Dateispeicher wird im Dashboard gemeldet.
+Der letzte Live-Stand speichert nur benötigte Felder: Ticketnummer/-ID, Titel, Zeitangaben, Queue, Status, Priorität, Eskalations-/Zeitwerte. Keine Artikel, Nachrichten, Anhänge, Kundenkennungen, Passwörter oder Session-IDs. Historische Live-Einträge enthalten nur Aggregate. Excel-Kopien behalten die importierten Originalspalten. Der lokale Speicher verwendet Windows-Benutzerrechte, keine zusätzliche Verschlüsselung.
 
-## Datenschutz
+Live-Anfragen gehen ausschliesslich an den angegebenen Znuny-Server. Es gibt keine Telemetrie oder Übertragung von Ticketdaten an weitere Dienste. Logs enthalten technische Ereignisse und Fehlerklassen, keine Passwörter, Session-IDs, Benutzernamen oder vollständigen Ticketantworten.
 
-Alle Ticketdaten werden ausschliesslich lokal verarbeitet. Die Anwendung überträgt keine Daten an externe Dienste. Die Protokolle enthalten technische Statusinformationen, KPI-Nummern und gekürzte Hashwerte, keine vollständigen Ticketinhalte.
-
-**Echte Znuny-Exporte und Kundendaten dürfen niemals auf GitHub eingecheckt werden.** `.gitignore` schliesst Excel-Dateien, erzeugte PDFs, lokale Datenordner, Protokolle und Testartefakte aus. Für Tests dürfen nur synthetische Daten verwendet werden.
+**Echte Znuny-Exporte, Zugangsdaten und Kundendaten dürfen niemals auf GitHub eingecheckt werden.** Excel-Dateien, PDFs, lokale Daten, Logs, Build-Ausgaben und Testartefakte sind ausgeschlossen. Automatische Tests dürfen den echten Server nicht aufrufen.
 
 ## Projektstruktur
 
 ```text
-assets/app_logo.png              Anwendungslogo, Fenstersymbol und dezentes Wasserzeichen
+assets/                     Vorhandenes Logo, Windows-Icon
 parcom_analytics/
-    __main__.py                 Anwendungsstart, Protokollierung und Instanzsperre
-    storage.py                  Dateinamen, Excel-Import und JSON-Persistenz
-    analytics.py                Unabhängige KPI-Berechnungen
-    service_desk.py             Periodenvergleich und transparenter Performance Score
-    service_desk_ui.py          Service-Desk-Register, Verlauf und Datengrundlage
-    charts.py                   Matplotlib-Diagramme
-    reports.py                  Gemeinsame Berichtsauswahl, Einzel-KPI-Verlauf und Management-Daten
-    ui.py                       Native Qt-Seiten und Tabellen
-    pdf_export.py               Paginierter PDF-Export mit Qt
-tests/                          Fach- und Integrationstests
-start.py                        Einfacher Startpunkt
-requirements.txt                Python-Abhängigkeiten
+    __main__.py             Start, Instanzsperre, Logging
+    storage.py              Excel, Dateinamen, Index, Löschen
+    znuny.py                Lesender REST-Client
+    connection.py           Qt-Hintergrundjobs, Sitzungen
+    live_data.py            Datumsfilter, Normalisierung
+    live_cache.py           Offline-Daten, aggregierte Historie
+    analytics.py            Gemeinsame KPI-Berechnungen
+    reports.py              Quellen, Vergleiche, Management-Daten
+    service_desk.py         Score-Formel, Periodenvergleich
+    ui.py                   Anmeldung, Navigation, Import, Berichte
+    service_desk_ui.py      Management- und Performance-Ansicht
+    charts.py               Matplotlib-Diagramme
+    theme.py                Dark Mode, Asset-Auswahl
+    animations.py           Abschaltbare Qt-Animationen
+    pdf_export.py           Paginierte Qt-PDFs
+tests/                      Synthetische Fach- und Integrationstests
+packaging/                  PyInstaller-Konfiguration
+installer/                  Inno-Setup-Konfiguration
+scripts/                    Build, Windows-Ressourcen
 ```
 
-## Version
+Das bereitgestellte Logo bleibt unverändert. `assets/app_icon.ico` enthält mehrere Windows-Grössen. Eine vorhandene dunkle Variante kann optional unter `assets/app_logo_dark.png` ergänzt werden; sonst gilt `assets/app_logo.png`. `assets/app_logo_light.png` ist als Ablage für eine helle Variante vorgesehen; aktuell gibt es keinen hellen UI-Modus.
 
-**0.1.0-prototype**, Entwicklungsbranch `develop/prototype`.
+## Version und Entwickler
 
-Dieser Stand ist zur fachlichen und visuellen Prüfung vorgesehen. Installer, Signierung, automatische Updates und Produktionsveröffentlichung sind nicht Bestandteil dieses Prototyps.
-
-## Entwickler
-
-Entwickelt von **Nico Köchli** für **ParCom Systems AG**.
+Anzeige **1.0**, technische Version **1.0.0**, Windows-Dateiversion **1.0.0.0**. Entwickelt von **Nico Köchli** für **ParCom Systems AG**.

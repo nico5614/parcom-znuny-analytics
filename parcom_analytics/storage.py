@@ -63,6 +63,9 @@ def month_label(month: str) -> str:
 
 
 def period_label(metadata: FileMetadata) -> str:
+    if getattr(metadata, "period_start", None):
+        start, end = datetime.fromisoformat(metadata.period_start), datetime.fromisoformat(metadata.period_end)
+        return f"{start:%d.%m.%Y} – {end:%d.%m.%Y}"
     if metadata.reporting_month:
         return month_label(metadata.reporting_month)
     timestamp = datetime.fromisoformat(metadata.export_timestamp)
@@ -189,7 +192,28 @@ class LocalStore:
         return sorted({record.reporting_month for record in self.records
                        if record.kpi_number == kpi and record.reporting_month}, reverse=True)
 
+    def delete_record(self, record: ImportRecord) -> None:
+        """Remove only a validated app-owned copy, rolling back a failed index write."""
+        if record not in self.records:
+            raise ValueError("Der Datensatz ist nicht mehr vorhanden.")
+        self._validate_record(asdict(record))
+        path = self.root / record.stored_path
+        backup = path.with_suffix(".deleting")
+        existed = path.exists()
+        if existed:
+            path.replace(backup)
+        try:
+            self._save([item for item in self.records if item != record])
+        except Exception:
+            if existed:
+                backup.replace(path)
+            raise
+        if existed:
+            backup.unlink()
+        LOGGER.info("Deleted local dataset KPI %s", record.kpi_number)
+
     def latest(self, kpi: int, month: str | None = None) -> ImportRecord | None:
         candidates = [record for record in self.records if record.kpi_number == kpi
                       and (kpi not in MONTHLY_KPIS or record.reporting_month == month)]
-        return max(candidates, key=lambda record: datetime.fromisoformat(record.export_timestamp), default=None)
+        # For corrected exports with equal timestamps, prefer the last import.
+        return max(reversed(candidates), key=lambda record: datetime.fromisoformat(record.export_timestamp), default=None)

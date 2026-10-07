@@ -226,3 +226,7 @@ logs/
 index.json
 index.corrupt-*.json
 .validation/
+.venv314/
+!packaging/*.spec
+live-cache.json
+settings.ini

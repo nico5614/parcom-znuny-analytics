@@ -127,7 +127,8 @@ def test_calendar_gaps_are_not_comparisons_or_connected_lines(history):
 @pytest.mark.parametrize("kpi,column,value", [(3, "Alter", "unknown"), (7, "Alter", None),
                                              (5, "Erstantwortzeit in Minuten", -1),
                                              (6, "Lösungszeit in Minuten", float("inf")),
-                                             (4, "FirstResponseTimeEscalation", 2)])
+                                             (4, "FirstResponseTimeEscalation", 2),
+                                             (4, "FirstResponseTimeEscalation", None)])
 def test_bad_values_prevent_partial_scores(history, kpi, column, value):
     store, frames, add = history
     add("2026-09-29")
@@ -173,8 +174,8 @@ def test_missing_file_columns_previous_invalid_and_timezone(history):
     assert "unterschiedliche Zeitzonen" in desk.build_report(store).issue
 
 
-@pytest.mark.parametrize("factor,expected,color", [(8, "↓ -10,0 Prozentpunkte", "#bd3838"),
-                                                  (4, "→ 0,0 Prozentpunkte", "#65727d")])
+@pytest.mark.parametrize("factor,expected,color", [(8, "↓ -10,0 Prozentpunkte", "#e08181"),
+                                                  (4, "→ 0,0 Prozentpunkte", "#a2afbe")])
 def test_score_decline_stability_and_incomplete_latest_ui(qapp, history, tickets, factor, expected, color):
     from parcom_analytics.ui import MainWindow
 

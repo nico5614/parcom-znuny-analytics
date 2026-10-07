@@ -8,8 +8,8 @@ import re
 import pandas as pd
 
 KPI_TITLES = {
-    1: "KPI 1 – Neue Tickets letzter Monat",
-    2: "KPI 2 – Geschlossene Tickets letzter Monat",
+    1: "KPI 1 – Neue Tickets",
+    2: "KPI 2 – Geschlossene Tickets",
     3: "KPI 3 – Aktuell offene Tickets",
     4: "KPI 4 – Offene Tickets nach Eskalation",
     5: "KPI 5 – Reaktionszeit geschlossener Tickets",
@@ -17,8 +17,8 @@ KPI_TITLES = {
     7: "KPI 7 – Wartende Tickets",
 }
 KPI_DESCRIPTIONS = {
-    1: "Zeigt alle im letzten Monat neu erstellten Tickets der PBX-Abteilung.",
-    2: "Zeigt alle im letzten Monat geschlossenen Tickets der PBX-Abteilung.",
+    1: "Zeigt alle im ausgewählten Zeitraum neu erstellten Tickets der PBX-Abteilung.",
+    2: "Zeigt alle im ausgewählten Zeitraum geschlossenen Tickets der PBX-Abteilung.",
     3: "Zeigt den aktuellen offenen Ticketbestand der PBX-Abteilung inklusive wartender Tickets.",
     4: "Zeigt offene PBX-Tickets nach Eskalationsstatus und macht bereits eskalierte Tickets direkt sichtbar.",
     5: "Zeigt geschlossene Tickets der PBX-Abteilung nach Reaktionszeit und dient zur Auswertung, wie schnell auf Kundenanfragen reagiert wurde.",
@@ -215,14 +215,20 @@ def analyze(kpi: int, source: pd.DataFrame) -> Analysis:
                                        "Die Altersklassen verwenden exakte Grenzen bei 7, 14 und 30 Tagen; keine SLA-Bewertung.")
     if kpi == 4:
         flags = numeric_values(frame["FirstResponseTimeEscalation"])
-        if not flags.isin([0, 1]).all():
+        absent = frame["FirstResponseTimeEscalation"].isna()
+        if not (flags.isin([0, 1]) | absent).all():
             raise DataError("Die Spalte FirstResponseTimeEscalation enthält ungültige Werte. Erwartet werden 0 oder 1.")
         escalated = flags.eq(1)
         count = int(escalated.sum())
+        chart = pd.Series({"Eskaliert": count, "Nicht eskaliert": int(flags.eq(0).sum())})
+        if absent.any():
+            chart["Unbekannt"] = int(absent.sum())
         return Analysis(kpi, {"Offene Tickets im Export": len(frame), "Davon Erstantwort eskaliert": count},
-                        pd.Series({"Eskaliert": count, "Nicht eskaliert": len(frame) - count}),
+                        chart,
                         "Erstantwort-Eskalation", "donut", details.loc[escalated], "Eskalierte Tickets · Nachverfolgung",
-                        references={"escalation_rate": count / len(frame) * 100 if len(frame) else 0.0},
+                        note=f"{int(absent.sum())} Tickets ohne Eskalationsfeld; nicht als eskaliert gewertet." if absent.any() else "",
+                        references={"escalation_rate": count / len(frame) * 100 if len(frame) else 0.0,
+                                    "invalid_values": int(absent.sum())},
                         row_highlights=["critical"] * count,
                         highlight_note="Rot: Erstantwort eskaliert (FirstResponseTimeEscalation = 1).")
     field = "Erstantwortzeit in Minuten" if kpi == 5 else "Lösungszeit in Minuten"

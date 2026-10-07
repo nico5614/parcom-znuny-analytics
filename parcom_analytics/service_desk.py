@@ -6,7 +6,7 @@ import logging
 
 import pandas as pd
 
-from .analytics import DataError, analyze, numeric_values, parse_age
+from .analytics import DataError, analyze
 from .storage import ImportRecord, LocalStore, MONTHLY_KPIS, read_workbook, reporting_month
 
 LOGGER = logging.getLogger(__name__)
@@ -115,36 +115,44 @@ def select_periods(records: list[ImportRecord]) -> list[Period]:
 def load_period(store: LocalStore, period: Period) -> None:
     if period.issue:
         return
-    frames = {}
+    analyses = {}
     for kpi, record in period.records.items():
         try:
             frame = read_workbook(store.root / record.stored_path)
-            analyze(kpi, frame)
-            frames[kpi] = frame
+            analyses[kpi] = analyze(kpi, frame)
         except Exception as error:
             LOGGER.warning("Service Desk KPI %s validation failed: %s", kpi, type(error).__name__)
             reason = str(error) if isinstance(error, DataError) else "Die gespeicherte Excel-Datei kann nicht gelesen werden. Bitte erneut importieren."
             period.issue = f"KPI {kpi}: {reason}"
             return
+    fill_period(period, analyses)
+
+
+def fill_period(period: Period, analyses: dict) -> None:
+    """Derive score inputs from the same analyses displayed in UI and PDF."""
     values = {}
     for kpi, prefix in [(3, "open"), (7, "waiting")]:
-        ages = frames[kpi]["Alter"].map(parse_age).astype(float)
-        if ages.isna().any():
+        analysis = analyses[kpi]
+        count = next(iter(analysis.metrics.values()))
+        if analysis.references.get("invalid_values"):
             period.issue = f"KPI {kpi}: Für den Score müssen alle Altersangaben gültig sein."
             return
-        values[f"{prefix}_count"] = len(ages)
-        values[f"{prefix}_old_share"] = float((ages > 30 * 1440).mean()) if len(ages) else 0.0
-    flags = numeric_values(frames[4]["FirstResponseTimeEscalation"])
-    values["escalation_share"] = float(flags.mean()) if len(flags) else 0.0
+        values[f"{prefix}_count"] = count
+        values[f"{prefix}_old_share"] = analysis.metrics["Älter als 30 Tage"] / count if count else 0.0
+    if analyses[4].references.get("invalid_values"):
+        period.issue = "KPI 4: Für den Score müssen alle Eskalationsangaben vorhanden sein."
+        return
+    values["escalation_share"] = analyses[4].references["escalation_rate"] / 100
     for kpi, key, column in [(5, "response", "Erstantwortzeit in Minuten"),
                              (6, "solution", "Lösungszeit in Minuten")]:
-        minutes = numeric_values(frames[kpi][column])
-        if minutes.empty or minutes.isna().any():
+        analysis = analyses[kpi]
+        if not analysis.metrics["Anzahl ausgewertete Tickets"] or analysis.references.get("invalid_values"):
             period.issue = f"KPI {kpi}: Für den Score werden Tickets mit durchgehend gültigen Minutenwerten benötigt (0 ist zulässig)."
             return
-        values[key] = float(minutes.median())
+        values[key] = analysis.references["median"]
     period.values = values
-    period.new_count, period.closed_count = len(frames[1]), len(frames[2])
+    period.new_count = analyses[1].metrics["Anzahl neue Tickets"]
+    period.closed_count = analyses[2].metrics["Anzahl geschlossene Tickets"]
 
 
 def build_report(store: LocalStore) -> Report:
@@ -153,6 +161,12 @@ def build_report(store: LocalStore) -> Report:
         return Report([], [], "Importieren Sie zunächst Daten für alle sieben KPIs.")
     for period in periods:
         load_period(store, period)
+    return compare_periods(periods)
+
+
+def compare_periods(periods: list[Period]) -> Report:
+    if not periods:
+        return Report([], [], HISTORY_MESSAGE)
     scores = []
     comparison_issues = {}
     by_month = {period.month: period for period in periods}

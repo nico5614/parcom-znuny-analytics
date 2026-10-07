@@ -1,7 +1,10 @@
 [project]
 name = "parcom-znuny-analytics"
-version = "0.1.0.dev0"
-requires-python = ">=3.12"
+dynamic = ["version"]
+requires-python = ">=3.14"
+
+[tool.setuptools.dynamic]
+version = {attr = "parcom_analytics.VERSION"}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
