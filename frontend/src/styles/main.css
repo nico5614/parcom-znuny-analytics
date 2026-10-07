@@ -1,0 +1,22 @@
+@import 'tailwindcss';
+
+:root {
+  font-family: 'Frutiger Neue LT Pro', Frutiger, 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  color: #f4f7fa;
+  background: #08111b;
+  font-synthesis: none;
+  --surface: #101c29; --border: #203247; --muted: #a6b2bf; --accent: #8b6cff;
+}
+body { margin: 0; }
+button { cursor: pointer; }
+button:disabled { cursor: wait; opacity: .6; }
+:focus-visible { outline: 2px solid #32d5ff; outline-offset: 4px; }
+.spike-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
+.eyebrow { font-size: 11px; letter-spacing: .18em; color: #748392; font-weight: 600; }
+.muted { color: var(--muted); }
+.primary { background: #8b6cff; color: white; padding: 11px 18px; border-radius: 7px; font-weight: 600; }
+.primary:hover { background: #997dff; }
+.status-dot { width: 8px; height: 8px; background: #39e58c; border-radius: 50%; display: inline-block; }
+.spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: #32d5ff; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
