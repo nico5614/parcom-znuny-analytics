@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime
+from dataclasses import replace
 from pathlib import Path
 
 import pandas as pd
@@ -16,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import APP_NAME, DISPLAY_VERSION, PUBLISHER
-from .analytics import Analysis, DataError, KPI_DESCRIPTIONS, KPI_TITLES, detail_value, field_label, metric_items
+from .analytics import Analysis, analyze, DataError, KPI_DESCRIPTIONS, KPI_TITLES, detail_value, field_label, metric_items
 from .charts import draw_chart, draw_history
 from .pdf_export import export_management_pdf, export_pdf
 from .reports import (KpiReport, ManagementReport, available_records, comparison_label, comparison_rows,
@@ -615,6 +616,19 @@ class MainWindow(QMainWindow):
         self.snapshot_combo.setMinimumWidth(190)
         controls.addWidget(self.snapshot_combo)
         layout.addLayout(controls)
+        filters = QHBoxLayout()
+        filters.addWidget(label("Tickettyp", "muted", False))
+        self.type_combo = QComboBox()
+        self.type_combo.addItem("Alle Typen", None)
+        self.type_combo.currentIndexChanged.connect(self.refresh_dashboard)
+        filters.addWidget(self.type_combo)
+        self.type_chart_button = QPushButton("Tickettypen anzeigen")
+        self.type_chart_button.setObjectName("secondary")
+        self.type_chart_button.setCheckable(True)
+        self.type_chart_button.toggled.connect(self.refresh_dashboard)
+        filters.addWidget(self.type_chart_button)
+        filters.addStretch()
+        layout.addLayout(filters)
         self.dashboard_stack = QStackedWidget()
         layout.addWidget(self.dashboard_stack, 1)
         empty = Card()
@@ -785,6 +799,17 @@ class MainWindow(QMainWindow):
 
     def kpi_changed(self):
         kpi = self.kpi_combo.currentData()
+        previous_type = self.type_combo.currentData()
+        self.type_combo.blockSignals(True)
+        self.type_combo.clear()
+        self.type_combo.addItem("Alle Typen", None)
+        if self.is_live and self.live_cache.batch and kpi:
+            for name in sorted(self.live_cache.batch.frames[kpi]["Typ"].dropna().astype(str).unique()):
+                self.type_combo.addItem(name, name)
+        self.type_combo.setCurrentIndex(max(0, self.type_combo.findData(previous_type)))
+        self.type_combo.blockSignals(False)
+        self.type_combo.setVisible(self.is_live)
+        self.type_chart_button.setVisible(self.is_live)
         previous = self.month_combo.currentData()
         self.month_combo.blockSignals(True)
         self.month_combo.clear()
@@ -825,8 +850,10 @@ class MainWindow(QMainWindow):
             elif not kpi:
                 self._empty("Keine KPI ausgewählt", "Wählen Sie oben eine KPI aus, um die Auswertung anzuzeigen.")
             else:
-                report = self.live_reports[kpi]
+                report = self.selected_live_report(kpi)
                 self._render_analysis(report.analysis, period_label(report.record), report)
+                if self.type_chart_button.isChecked():
+                    self.render_types(kpi)
             return
         if not self.store.records:
             self._empty("Keine Dateien hochgeladen", "Importieren Sie zuerst Znuny-Excel-Dateien unter «Import».")
@@ -849,6 +876,44 @@ class MainWindow(QMainWindow):
                 except Exception as error:
                     LOGGER.error("Dashboard KPI %s failed: %s", kpi, type(error).__name__)
                     self._empty("Auswertung nicht möglich", "Die gespeicherte Excel-Datei konnte nicht ausgewertet werden. Bitte importieren Sie die Datei erneut.")
+
+    def selected_live_report(self, kpi):
+        from .live_metrics import analyze_live
+        from .reports import HistoryPoint
+        report = self.live_reports[kpi]
+        selected = self.type_combo.currentData()
+        if not selected:
+            return report
+        batch = self.live_cache.batch
+        frame = batch.frames[kpi]
+        analysis = analyze_live(kpi, frame.loc[frame["Typ"].eq(selected)], batch.period)
+        history = [HistoryPoint(report.record, analysis)]
+        if kpi in batch.previous:
+            previous = batch.previous[kpi]
+            history.insert(0, HistoryPoint(report.history[-2].record, analyze(kpi, previous.loc[previous["Typ"].eq(selected)])))
+        return replace(report, analysis=analysis, history=history, comparable=len(history)>1,
+                       history_note="Tickettyp: " + selected, source=report.source + " · Typ: " + selected)
+
+    def render_types(self, kpi):
+        frame = self.live_cache.batch.frames[kpi]
+        selected = self.type_combo.currentData()
+        if selected:
+            frame = frame.loc[frame["Typ"].eq(selected)]
+        counts = frame["Typ"].fillna("Typ unbekannt").value_counts().sort_index()
+        self.animator.stop(self.canvas)
+        self.figure.clear()
+        axis = self.figure.add_subplot(111)
+        if len(counts):
+            bars = axis.barh(counts.index, counts.values, color="#32D5FF")
+            axis.bar_label(bars, padding=4, color="#F4F7FA")
+            axis.spines[["top","right","left","bottom"]].set_visible(False)
+            axis.margins(x=.2)
+        else:
+            axis.text(.5,.5,"Keine Tickets im Zeitraum",ha="center",transform=axis.transAxes)
+        axis.set_title("Tickettypen · inklusive Unclassified", color="#F4F7FA", loc="left")
+        self.figure.subplots_adjust(left=.20,right=.94,top=.85,bottom=.12)
+        dark_figure(self.figure)
+        self.canvas.draw()
 
     def _render_analysis(self, analysis: Analysis, period: str, report: KpiReport | None = None):
         self.animator.stop(self.canvas)

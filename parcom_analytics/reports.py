@@ -155,4 +155,4 @@ def default_report_filename(report: KpiReport | ManagementReport) -> str:
     record = report.record
     period = (f"{record.period_start}_{record.period_end}" if getattr(record, "period_start", None)
               else record.reporting_month or datetime.fromisoformat(record.export_timestamp).strftime("%Y-%m-%d_%H-%M"))
-    return f"KPI_{record.kpi_number}_{names[record.kpi_number]}_{period}.pdf"
+    return f"{names[record.kpi_number]}_{period.replace(':', '-')}.pdf"

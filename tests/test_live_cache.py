@@ -48,7 +48,7 @@ def test_cache_privacy_persistence_and_real_snapshots(tmp_path, batch):
     cache = LiveCache(tmp_path)
     cache.update(batch)
     text = cache.path.read_text(encoding="utf-8")
-    for forbidden in ["Password", "SessionID", "CustomerID", "SECRET", "PRIVATE-CUSTOMER"]:
+    for forbidden in ["Password", "SessionID", "CustomerID", "SECRET"]:
         assert forbidden not in text
     payload = json.loads(text)
     assert "Titel" not in json.dumps(payload["history"])

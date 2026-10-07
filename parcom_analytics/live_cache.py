@@ -11,6 +11,7 @@ from pathlib import Path
 import pandas as pd
 
 from .analytics import Analysis, DataError, analyze, date_values
+from .live_metrics import analyze_live, operational_metrics
 from .periods import TimeRange
 from .live_data import DateRange, LiveBatch, NORMALIZED_COLUMNS, TIMEZONE
 from .reports import HistoryPoint, KpiReport, management_report
@@ -89,7 +90,8 @@ class LiveCache:
                           for kpi, rows in current["frames"].items()}
                 if set(frames) != set(range(1, 8)):
                     raise ValueError("Incomplete cache")
-                self.batch = LiveBatch(period, current["captured_at"], frames)
+                previous = {int(kpi): pd.DataFrame(rows, columns=NORMALIZED_COLUMNS, dtype=object) for kpi,rows in current.get("previous", {}).items()}
+                self.batch = LiveBatch(period, current["captured_at"], frames, previous, current.get("agents", []), current.get("note", ""))
                 self.history, self.periods = payload["history"], payload["periods"]
                 self.reports()
             except (ValueError, KeyError, TypeError, OSError):
@@ -131,7 +133,9 @@ class LiveCache:
         safe_frames = {kpi: frame.reindex(columns=NORMALIZED_COLUMNS).astype(object).where(pd.notna(frame), None).to_dict("records")
                        for kpi, frame in batch.frames.items()}
         payload = clean_json({"current": {"start": batch.period.start.isoformat(), "end": batch.period.end.isoformat(),
-                                          "captured_at": batch.captured_at, "frames": safe_frames},
+                                          "captured_at": batch.captured_at, "frames": safe_frames,
+                                          "previous": {kpi: frame.reindex(columns=NORMALIZED_COLUMNS).astype(object).where(pd.notna(frame), None).to_dict("records") for kpi, frame in batch.previous.items()},
+                                          "agents": batch.agents, "note": batch.note},
                               "history": history, "periods": periods})
         temporary = self.path.with_suffix(".json.tmp")
         try:
@@ -152,7 +156,7 @@ class LiveCache:
             return {}
         batch, reports = self.batch, {}
         for kpi, frame in batch.frames.items():
-            analysis = analyze(kpi, frame)
+            analysis = analyze_live(kpi, frame, batch.period) if isinstance(batch.period, TimeRange) else analyze(kpi, frame)
             monthly = kpi in MONTHLY_KPIS
             single_month = (batch.period.start.day == 1 and
                             batch.period.end == (pd.Timestamp(batch.period.start) + pd.offsets.MonthEnd()).date())
@@ -169,8 +173,14 @@ class LiveCache:
                 note += " Für einen Verlauf wird mindestens ein weiterer Datenstand benötigt."
             if not history:
                 history = [HistoryPoint(record, analysis)]
+            if monthly and kpi in batch.previous:
+                start, end = batch.period.previous
+                old_record = LiveRecord(kpi, batch.captured_at, TIMEZONE, None, f"previous:{kpi}", start.isoformat(), end.isoformat())
+                old_analysis = analyze(kpi, batch.previous[kpi])
+                history = [HistoryPoint(old_record, old_analysis), HistoryPoint(record, analysis)]
+                note = "Vergleich mit dem direkt vorhergehenden, gleich langen Zeitraum."
             reports[kpi] = KpiReport(record, analysis, history, note, "Znuny Live · lokal gespeicherter Datenstand",
-                                     comparable=not monthly or single_month)
+                                     comparable=kpi in batch.previous or not monthly or single_month)
         self._reports = reports
         return reports
 
@@ -183,7 +193,10 @@ class LiveCache:
         reports = self.reports()
         if len(reports) != 7:
             raise DataError("Keine lokalen Znuny-Daten verfügbar.")
-        return management_report(reports, self.performance())
+        result = management_report(reports, self.performance())
+        if isinstance(self.batch.period, TimeRange):
+            result.metrics.update({key:str(value) for key,value in operational_metrics(self.batch).items()})
+        return result
 
     def clear(self):
         self.path.unlink(missing_ok=True)

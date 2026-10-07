@@ -546,7 +546,8 @@ class ServiceDeskPage(QScrollArea):
 
                 self.overview_tiles[name][1].setText("Kein Timer-Datenstand")
 
-            self.action_note.setText("Bestand und Warte-Tickets beziehen sich auf den aktuellen Datenstand.")
+            self.action_note.setText("Bestand und Warte-Tickets beziehen sich auf den aktuellen Datenstand." +
+                (f"  · Aktive Timer: {management.metrics['Aktive Timer']} · Ohne Timer: {management.metrics['Ohne Timer']} · Timer unbekannt: {management.metrics['Timer unbekannt']} · Auto-Schliessen: {management.metrics['Automatisches Schliessen vorgemerkt']}" if 'Aktive Timer' in management.metrics else ""))
 
             self._draw_volume(management)
 

@@ -74,6 +74,12 @@ def draw_chart(figure: Figure, analysis: Analysis) -> None:
         axis.xaxis.set_major_formatter(FuncFormatter(lambda value, _: format_duration(max(0, value))))
         axis.set_xlim(left=0)
         axis.set_xlabel("Reaktionszeit" if analysis.kpi == 5 else "Lösungszeit", fontsize=9, color="#65727d")
+    elif analysis.chart_kind == "period":
+        axis.bar(range(len(values)), values.values, color=ORANGE, width=.65)
+        positions = list(range(0, len(values), max(1, (len(values)+7)//8)))
+        axis.set_xticks(positions, [str(values.index[index]) for index in positions])
+        axis.set_xlabel("Zeitraum · Europe/Zurich", fontsize=9, color="#65727d")
+        axis.margins(y=.2)
     elif analysis.chart_kind == "daily":
         mean, maximum = analysis.references["daily_mean"], analysis.references["daily_max"]
         colors = ["#97430e" if value == maximum else "#c2611b" if value > mean else ORANGE for value in values]
