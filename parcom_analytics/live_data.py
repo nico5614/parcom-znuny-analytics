@@ -67,6 +67,7 @@ class LiveBatch:
     previous: dict[int, pd.DataFrame] = field(default_factory=dict)
     agents: list[dict] = field(default_factory=list)
     note: str = ""
+    identities: list[dict] = field(default_factory=list)
 
 
 def normalize_tickets(tickets: list[dict], captured=None) -> pd.DataFrame:
@@ -164,6 +165,7 @@ def fetch_period(client, period, cancel, progress):
         "escalated": search({"StateType": list(OPEN_TYPES), "TicketEscalationTimeOlderMinutes": 1}),
         "previous_new": search(dated("Create", previous_start, previous_end)),
         "previous_closed": search({**dated("Close", previous_start, previous_end), "StateType": "closed"}),
+        "changed": search({"TicketLastChangeTimeNewerDate": previous_start.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), "SearchInArchive":"AllTickets"}),
     }
     ids = list(dict.fromkeys(value for values in selections.values() for value in values))
     tickets = {}
@@ -171,7 +173,7 @@ def fetch_period(client, period, cancel, progress):
     for offset in range(0, len(ids), 50):
         if cancel.is_set():
             raise ZnunyError("Laden abgebrochen.")
-        for ticket in client.get_tickets(ids[offset:offset+50]):
+        for ticket in client.get_tickets(ids[offset:offset+50], cancel=cancel):
             if ticket.get("Queue") not in DEFAULT_QUEUES:
                 raise ZnunyError("Die Daten haben sich während des Ladens geändert. Bitte erneut aktualisieren.")
             ticket_id = str(ticket["TicketID"])
@@ -179,6 +181,49 @@ def fetch_period(client, period, cancel, progress):
             ticket["_captured"] = datetime.now(ZURICH)
             tickets[ticket_id] = ticket
         progress(round(min(offset+50, len(ids))/max(1,len(ids))*100))
+
+    from .agents import state_types, identity, closed_event, response_actor
+    mapping, activity, identities = state_types(tickets.values()), [], {}
+    for ticket_id, ticket in tickets.items():
+        if cancel.is_set():
+            raise ZnunyError("Laden abgebrochen.")
+        # History is read only, and discarded after deriving attribution and agent identities.
+        history = client.get_history(ticket_id)
+        if not isinstance(history, list):
+            raise ZnunyError("Die Tickethistorie von Znuny ist ungültig.")
+        if ticket.get("UntilTime") is None and str(ticket.get("StateType", "")).startswith("pending"):
+            from .live_metrics import server_datetime
+            pending = [event for event in history if event.get("HistoryType") == "SetPendingTime" and server_datetime(event.get("CreateTime"))]
+            if pending:
+                latest = max(pending, key=lambda item:server_datetime(item["CreateTime"]))
+                value = str(latest.get("Name", "")).strip("%")
+                due = server_datetime(value)
+                if due:
+                    ticket["UntilTime"] = due.timestamp()-ticket["_captured"].timestamp()
+                elif value.startswith("0000-00-00") or value.startswith("00-00-00"):
+                    ticket["UntilTime"] = 0
+        owner = identity(ticket.get("OwnerID"), ticket.get("Owner"))
+        if owner:
+            identities[owner["id"]] = owner
+        for event in history:
+            actor = identity(event.get("CreateBy"))
+            if actor and actor["id"] not in identities:
+                identities[actor["id"]] = actor
+        responder, response_time = response_actor(ticket, history)
+        for key, start, end in (("current", period.start, period.end), ("previous", previous_start, previous_end)):
+            closer, closed_time = closed_event(history, start, end, mapping)
+            response_in_period = response_time is not None and start <= response_time < end
+            if key == "current":
+                ticket.update({"ClosedByID":closer, "ClosedAt":closed_time.isoformat() if closed_time else None,
+                               "ResponseByID":responder if response_in_period else None,
+                               "ResponseAt":response_time.isoformat() if response_in_period else None})
+            if closed_time or response_in_period:
+                activity.append({"TicketID":ticket_id, "Ticket#":ticket.get("TicketNumber"), "Titel":ticket.get("Title"),
+                                 "Typ":ticket.get("Type"), "Status":ticket.get("State"), "period":key,
+                                 "ClosedByID":closer, "ResponseByID":responder if response_in_period else None,
+                                 "ClosedAt":closed_time.isoformat() if closed_time else None,
+                                 "ResponseAt":response_time.isoformat() if response_in_period else None,
+                                 "response_minutes":ticket.get("FirstResponseInMin") if response_in_period else None})
 
     def frame(key):
         rows = []
@@ -209,4 +254,5 @@ def fetch_period(client, period, cancel, progress):
     old_new, old_closed = frame("previous_new"), frame("previous_closed")
     return LiveBatch(period, datetime.now(ZURICH).isoformat(timespec="seconds"),
                      {1:new, 2:closed, 3:opened, 4:opened.copy(), 5:closed.copy(), 6:closed.copy(), 7:waiting},
-                     {1:old_new, 2:old_closed, 5:old_closed.copy(), 6:old_closed.copy()})
+                     {1:old_new, 2:old_closed, 5:old_closed.copy(), 6:old_closed.copy()},
+                     activity, identities=list(identities.values()))

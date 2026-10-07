@@ -12,7 +12,7 @@ from parcom_analytics.periods import TimeRange, ZURICH
 
 def test_live_scope_custom_closed_states_waiting_escalation_and_comparison(tmp_path):
     client = Mock()
-    client.search_tickets.side_effect = [["1"],["2"],["3","4"],["3","4"],["3"],["5"],["6"]]
+    client.search_tickets.side_effect = [["1"],["2"],["3","4"],["3","4"],["3"],["5"],["6"],[]]
     raw = [dict(TicketID=str(i), TicketNumber=str(i), Title="Synthetisch", Age=0, Queue="PBX", Type="Unclassified",
                 Created="2026-09-30 10:00:00", Closed="2026-10-01 10:00:00", FirstResponseInMin=0, SolutionInMin=10,
                 FirstResponseTimeEscalation=0, StateType="closed" if i in (2,6) else "pending auto" if i==4 else "pending reminder",
@@ -21,6 +21,7 @@ def test_live_scope_custom_closed_states_waiting_escalation_and_comparison(tmp_p
     for item in raw[4:]:
         item["Created"],item["Closed"] = "2026-09-24 10:00:00","2026-09-25 10:00:00"
     client.get_tickets.return_value = raw
+    client.get_history.return_value = []
     period=TimeRange.preset("1W",datetime(2026,10,6,14,tzinfo=ZURICH))
     batch=fetch_live(client,period,Event())
     assert len(batch.frames[2])==1 and batch.frames[2].iloc[0]["Status"]=="ohne Rückmeldung geschlossen"

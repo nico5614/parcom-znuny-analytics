@@ -59,6 +59,10 @@ def analyze_live(kpi, frame, period):
     columns = ["Ticket#", "Titel", "Status", "Typ", "Queue", "Erstellt", "Zuletzt geändert", "Alter",
                "OwnerID", "Sperre", "Timer", "Warten bis", "Kundennummer", "Erstantwortzeit in Minuten", "Lösungszeit in Minuten"]
     result.details = frame.loc[indexes].reindex(columns=columns).copy()
+    from .agents import code
+    result.details["OwnerID"] = result.details["OwnerID"].map(code)
+    result.details.rename(columns={"OwnerID":"Besitzer"},inplace=True)
+    result.details.attrs["ticket_ids"] = dict(zip(frame["Ticket#"].map(str),frame["TicketID"].map(str)))
     for column in ("Erstellt", "Zuletzt geändert", "Warten bis"):
         result.details[column] = result.details[column].map(lambda value: server_datetime(value).strftime("%d.%m.%Y %H:%M") if server_datetime(value) else "–")
     if kpi == 7:

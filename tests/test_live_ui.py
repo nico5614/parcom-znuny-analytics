@@ -46,6 +46,7 @@ def test_live_login_refresh_all_kpis_pdf_failure_reconnect_logout(qapp, tmp_path
             "Age": parse_age(row["Alter"]) * 60, "Queue": "PBX", "Created": "2026-10-01 10:00:00", "Closed": "2026-10-02 10:00:00"}
            for index, row in enumerate(tickets.to_dict("records"), 1)]
     client.get_tickets.return_value = raw
+    client.get_history.return_value = []
     window.connection.client = client
     assert window.gate.currentIndex() == 1 and window.isMaximized()
     window.username.setText("synthetic-user")

@@ -1,6 +1,7 @@
 """The native Qt desktop interface."""
 
 import logging
+import re
 from datetime import datetime
 from dataclasses import replace
 from pathlib import Path
@@ -8,8 +9,8 @@ from pathlib import Path
 import pandas as pd
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
-from PySide6.QtCore import QAbstractTableModel, QDate, QModelIndex, QSettings, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
+from PySide6.QtCore import QAbstractTableModel, QDate, QModelIndex, QSettings, Qt, QThread, QTimer, Signal, QUrl
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap, QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QComboBox, QFileDialog, QFrame, QHBoxLayout,
     QHeaderView, QLabel, QLayout, QMainWindow, QMessageBox, QPushButton, QScrollArea,
@@ -77,7 +78,7 @@ class FrameModel(QAbstractTableModel):
         column = str(self.frame.columns[index.column()])
         value = self.frame.iat[index.row(), index.column()]
         if role == Qt.ItemDataRole.ToolTipRole and column == "Ticket#":
-            return "Klicken, um die Ticketnummer zu kopieren"
+            return "Ticket in Znuny öffnen" if self.frame.attrs.get("ticket_ids") else "Klicken, um die Ticketnummer zu kopieren"
         if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.ToolTipRole):
             return detail_value(column, value)
         if role == Qt.ItemDataRole.ForegroundRole and column == "Ticket#":
@@ -112,6 +113,15 @@ def table_view() -> QTableView:
     table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
     table.horizontalHeader().setStretchLastSection(True)
     return table
+
+
+def open_ticket(model, index):
+    if not index.isValid() or model.frame.columns[index.column()] != "Ticket#":
+        return False
+    ticket_id = model.frame.attrs.get("ticket_ids", {}).get(str(model.frame.iloc[index.row()]["Ticket#"]))
+    if ticket_id and re.fullmatch(r"\d+", str(ticket_id)):
+        return QDesktopServices.openUrl(QUrl("https://znuny.parcom.ch/otrs/index.pl?Action=AgentTicketZoom;TicketID="+str(ticket_id)))
+    return False
 
 
 def set_table(table: QTableView, frame: pd.DataFrame, analysis: Analysis | None = None) -> None:
@@ -224,12 +234,8 @@ class MainWindow(QMainWindow):
         self.service_desk.animator = self.animator
         self.stack.addWidget(self.service_desk)
         self._build_download()
-        self.agent_page = QWidget()
-        agent_layout = QVBoxLayout(self.agent_page)
-        agent_layout.setContentsMargins(24, 24, 24, 24)
-        agent_layout.addWidget(label("Agenten", "title"))
-        agent_layout.addWidget(label("Noch keine Agentenauswertung geladen", "muted"))
-        agent_layout.addStretch()
+        from .agents_ui import AgentsPage
+        self.agent_page = AgentsPage(self.live_cache, self.settings)
         self.stack.addWidget(self.agent_page)
         footer = QHBoxLayout()
         footer.setContentsMargins(28, 8, 28, 12)
@@ -452,6 +458,7 @@ class MainWindow(QMainWindow):
 
     def _live_loaded(self, reports):
         self.live_reports = reports
+        self.agent_page.refresh()
         self.kpi_changed()
         self.refresh_download_choices()
         self.service_desk.refresh()
@@ -745,6 +752,8 @@ class MainWindow(QMainWindow):
             self.service_desk.refresh()
         elif index == 4:
             self.refresh_download_choices()
+        elif index == 5:
+            self.agent_page.refresh()
         for position, button in enumerate(self.nav_buttons):
             button.setChecked(position == index)
         self.animator.fade(self.stack.currentWidget())
@@ -977,6 +986,9 @@ class MainWindow(QMainWindow):
 
     def copy_ticket(self, index: QModelIndex):
         model = self.detail_table.model()
+        if self.is_live:
+            open_ticket(model,index)
+            return
         if not index.isValid() or model.frame.columns[index.column()] != "Ticket#":
             return
         value = model.data(index)

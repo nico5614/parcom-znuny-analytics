@@ -47,7 +47,9 @@ class ZnunyClient:
         # Routes are intentionally closed: there is no generic write-ticket API.
         method, path = {"SessionCreate": ("POST", "/Session"),
                         "SessionDelete": ("DELETE", "/Session/" + suffix),
+                        "SessionGet": ("GET", "/Session/" + suffix),
                         "TicketSearch": ("POST", "/Ticket/Search"),
+                        "TicketHistoryGet": ("GET", "/Ticket/History/" + suffix),
                         "TicketGet": ("GET", "/Ticket/" + suffix)}[operation]
         LOGGER.info("Znuny operation: %s", operation)
         try:
@@ -129,12 +131,14 @@ class ZnunyClient:
     def get_ticket(self, ticket_id):
         return self.get_tickets([ticket_id])[0]
 
-    def get_tickets(self, ticket_ids):
+    def get_tickets(self, ticket_ids, cancel=None):
         ids = [str(value) for value in ticket_ids]
         if not ids or len(ids) > 50 or any(not re.fullmatch(r"\d+", value) for value in ids):
             raise ValueError("Invalid ticket ID")
         tickets = []
         for ticket_id in ids:
+            if cancel is not None and cancel.is_set():
+                raise ZnunyError("Laden abgebrochen.")
             payload = self._request("TicketGet", ticket_id, data={**self._auth(), "Extended": 1,
                                     "AllArticles": 0, "Attachments": 0, "DynamicFields": 0})
             item = payload.get("Ticket")
@@ -144,6 +148,25 @@ class ZnunyClient:
                 raise ZnunyError("Die Ticketantwort von Znuny ist ungültig.")
             tickets.append(item)
         return tickets
+
+    def get_history(self, ticket_id):
+        if not re.fullmatch(r"\d+", str(ticket_id)):
+            raise ValueError("Invalid ticket ID")
+        payload = self._request("TicketHistoryGet", str(ticket_id), data=self._auth())
+        items = payload.get("TicketHistory")
+        if isinstance(items, dict):
+            items = [items]
+        if not isinstance(items, list) or len(items) != 1 or str(items[0].get("TicketID")) != str(ticket_id):
+            raise ZnunyError("Die Tickethistorie von Znuny ist ungültig.")
+        history = items[0].get("History")
+        if not isinstance(history, list) or any(not isinstance(item, dict) for item in history):
+            raise ZnunyError("Die Tickethistorie von Znuny ist ungültig.")
+        return history
+
+    def session_valid(self):
+        self._auth()
+        self._request("SessionGet", quote(self._session_id, safe=""))
+        return True
 
     def test_connection(self):
         self.search_tickets(limit=1)

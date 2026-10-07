@@ -374,7 +374,7 @@ class ServiceDeskPage(QScrollArea):
 
         empty.setContentsMargins(24, 24, 24, 24)
 
-        empty.addWidget(label("Performance Score noch nicht verfügbar", "title"))
+        empty.addWidget(label("Performance Score noch nicht verfügbar", "section"))
 
         self.empty_card.setToolTip(HISTORY_MESSAGE)
 
@@ -543,8 +543,9 @@ class ServiceDeskPage(QScrollArea):
                 note.setText("Aktueller Bestand" if name in {"Offene Tickets", "Wartende Tickets", "Offene Tickets >30 Tage"} else "Ausgewählter Zeitraum")
 
             for name in ("Überfällige Warte-Tickets", "Überfällig + gesperrt"):
-
-                self.overview_tiles[name][1].setText("Kein Timer-Datenstand")
+                value, note = self.overview_tiles[name]
+                note.setText("Aktueller Bestand" if name in management.metrics else "Kein Timer-Datenstand")
+                value.setStyleSheet("font-size: 44px; color: " + ("#FF5C6C" if int(management.metrics.get(name, "0")) else "#F4F7FA") + ";")
 
             self.action_note.setText("Bestand und Warte-Tickets beziehen sich auf den aktuellen Datenstand." +
                 (f"  · Aktive Timer: {management.metrics['Aktive Timer']} · Ohne Timer: {management.metrics['Ohne Timer']} · Timer unbekannt: {management.metrics['Timer unbekannt']} · Auto-Schliessen: {management.metrics['Automatisches Schliessen vorgemerkt']}" if 'Aktive Timer' in management.metrics else ""))

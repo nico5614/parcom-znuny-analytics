@@ -91,7 +91,7 @@ class LiveCache:
                 if set(frames) != set(range(1, 8)):
                     raise ValueError("Incomplete cache")
                 previous = {int(kpi): pd.DataFrame(rows, columns=NORMALIZED_COLUMNS, dtype=object) for kpi,rows in current.get("previous", {}).items()}
-                self.batch = LiveBatch(period, current["captured_at"], frames, previous, current.get("agents", []), current.get("note", ""))
+                self.batch = LiveBatch(period, current["captured_at"], frames, previous, current.get("agents", []), current.get("note", ""), current.get("identities", []))
                 self.history, self.periods = payload["history"], payload["periods"]
                 self.reports()
             except (ValueError, KeyError, TypeError, OSError):
@@ -135,7 +135,7 @@ class LiveCache:
         payload = clean_json({"current": {"start": batch.period.start.isoformat(), "end": batch.period.end.isoformat(),
                                           "captured_at": batch.captured_at, "frames": safe_frames,
                                           "previous": {kpi: frame.reindex(columns=NORMALIZED_COLUMNS).astype(object).where(pd.notna(frame), None).to_dict("records") for kpi, frame in batch.previous.items()},
-                                          "agents": batch.agents, "note": batch.note},
+                                          "agents": batch.agents, "note": batch.note, "identities":batch.identities},
                               "history": history, "periods": periods})
         temporary = self.path.with_suffix(".json.tmp")
         try:
