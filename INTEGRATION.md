@@ -31,3 +31,12 @@
 - Phase 2 checkpoint: `dc3b867`. Phase 3 checkpoint is the merge commit containing this entry.
 - Next: Phase 4, native integrated source application smoke with real WebView2 and two PDF worker exports. Then document real acceptance as pending if no interactive sign-in, and perform visual acceptance before packaging.
 - No live Znuny login or real timing measurements claimed. No packaging/release/Main changes yet.
+
+## Phase 4 — completed, 8 October 2026
+
+- Phase 3 checkpoint: `6580254`.
+- Native integrated source smoke passed with actual Windows WebView2 (`edgechromium`), bundled production frontend assets and React acknowledgement of the Python bridge event.
+- All seven report adapters and Agenten adapter succeeded; both actual PDF exports (overview and response time) succeeded in subprocesses.
+- Qt modules and Qt DLLs in the host were empty before and after PDF export. Report: ignored `.validation/integration-source.json`.
+- UI interaction coverage: 8 passing browser checks from Phase 3 cover login/error distinction, navigation, all analyses, timeline custom/snap, agents/team, details, export, logout, cache and navigation during pending requests. Native smoke verifies the actual renderer/bridge; browser checks use controlled synthetic IPC.
+- No source fixes required in this phase. Next: Phase 5, record availability of interactive live acceptance, then Phase 6 visual review.
