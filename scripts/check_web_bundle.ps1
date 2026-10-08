@@ -1,7 +1,7 @@
-param([switch]$IncludePdf)
+param([switch]$IncludePdf, [string]$ExecutablePath = '')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$exe = Join-Path $root 'dist\web\ParCom_Analytics_Web\ParCom Znuny Analytics.exe'
+$exe = if ($ExecutablePath) { $ExecutablePath } else { Join-Path $root 'dist\web\ParCom_Analytics_Web\ParCom Znuny Analytics.exe' }
 $report = Join-Path $root ('.validation\web-bundle-' + [guid]::NewGuid().ToString('N') + '.json')
 $originalPath = $env:PATH
 try {

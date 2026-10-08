@@ -83,3 +83,14 @@
 - Antigravity equals baseline; remove only during Phase 9 as authorized. Baseline and both specialist branches unchanged. Main still `f25d853550fba6f86ef8bdc7e4bde3da9118fce8`; no tag/release.
 - Default sandbox process startup fails; reviewed escalated commands work. No security rejection outstanding.
 - Stopped at a coherent Phase 7 checkpoint because remaining current-window usage reached 14%; no Phase 8 implementation begun.
+
+## Phase 8 — completed on development host, 8 October 2026
+
+- Phase 7 checkpoint: `3e1aeca`. Installer now packages the integrated WebView onedir distribution and isolated PDF worker, with version 1.0.0 / publisher Nico Köchli and the final executable name.
+- Build entry delegates to the sanitized WebView pipeline. Existing-bundle packaging still requires an actual frozen startup/PDF check. Upgrade replaces only managed runtime directories and removes the obsolete executable; user data remains outside the payload.
+- `scripts/check_installer.ps1` compiles the same installer under a separate validation identity to preserve the existing user installation. Actual current-user installation, selected path, desktop/Start Menu shortcuts, Installed Apps metadata, reinstallation/obsolete-file cleanup, installed application startup and both PDF exports passed. Uninstall removed managed files, shortcuts and registration, retained LocalAppData and unrelated files; own retention markers subsequently removed.
+- WebView2 detected from Microsoft's documented runtime registry keys. Simulated absent runtime blocks before installation with German guidance; this test override exists only in the validation installer. No machine runtime registry was changed. Reference: https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution
+- 13 focused Python startup/bridge tests passed (1.24 s). Native installed PDF/Qt-isolation report: `.validation/web-bundle-1a5ea5491baf4f68a5a00b93dccf3288.json`. Installer result: `.validation/installer-5e5e5c487fd945f2a5bfdf01d5198493/result.json`. Initial cleanup assertion raced the Inno helper; bounded settling added and complete repeat passed.
+- Production setup: `dist/release/ParCom_Znuny_Analytics_Setup_1.0.0.exe`; SHA256 `d6b85d960e7888849bc46774bffaa25a15fd9ee82e137871c8b5fd56854157fa`. Unsigned, local artifact, not a published release. No Excel/PDF/cache/settings/fixture data files in the distribution.
+- Validation uses an isolated AppId; the existing production installation was not upgraded or uninstalled. Fresh Windows/all-users installation and actual runtime installation on a machine without WebView2 remain unverified. Live acceptance and physical DPI gate remain open.
+- Checkpoint: commit containing this entry (`git log -1 --format=%H -- INTEGRATION.md`). Next exact phase: 9, targeted cleanup and authorized obsolete antigravity branch deletion; then final README/screenshots (10), validation (11), gated release (12).

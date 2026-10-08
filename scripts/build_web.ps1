@@ -1,8 +1,8 @@
-param([switch]$SkipTests)
+param([switch]$SkipTests, [string]$PythonPath = '.venv314\Scripts\python.exe')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
-$python = Join-Path $root '.venv314\Scripts\python.exe'
+$python = (Resolve-Path -LiteralPath $PythonPath).Path
 function Assert-Exit([string]$step) { if ($LASTEXITCODE -ne 0) { throw "$step failed ($LASTEXITCODE)" } }
 pnpm --dir frontend install --frozen-lockfile
 Assert-Exit 'Frontend install'
