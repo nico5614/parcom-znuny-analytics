@@ -94,3 +94,12 @@
 - Production setup: `dist/release/ParCom_Znuny_Analytics_Setup_1.0.0.exe`; SHA256 `d6b85d960e7888849bc46774bffaa25a15fd9ee82e137871c8b5fd56854157fa`. Unsigned, local artifact, not a published release. No Excel/PDF/cache/settings/fixture data files in the distribution.
 - Validation uses an isolated AppId; the existing production installation was not upgraded or uninstalled. Fresh Windows/all-users installation and actual runtime installation on a machine without WebView2 remain unverified. Live acceptance and physical DPI gate remain open.
 - Checkpoint: commit containing this entry (`git log -1 --format=%H -- INTEGRATION.md`). Next exact phase: 9, targeted cleanup and authorized obsolete antigravity branch deletion; then final README/screenshots (10), validation (11), gated release (12).
+
+## Phase 9 — completed, 8 October 2026
+
+- Phase 8 checkpoint: `c141b63`.
+- Remote antigravity/version-1-0 was exactly baseline `5e993d0826b389cdccee51e7f6e1d460c5e22838`, with no unique code; authorized remote deletion completed. Local branch was already absent. Verified absence after deletion; baseline/specialists/Main unchanged.
+- Removed this integration's disposable pytest directories and validation-only installer binaries after checking paths. Retained JSON/log evidence, final EXE/setup artifacts and meaningful source/tests. Removed all own install retention markers; existing user installation retained.
+- Tracked-file check found no XLSX/PDF/cache/settings/.env files. Focused credential-pattern scan found no matching hardcoded passwords/session tokens in application, scripts, frontend source or tests. This is a targeted hygiene check, not a claim of a comprehensive security audit.
+- No application code changed; Phase 8's 13 passing focused tests and native installer checks remain current. Git status clean before this note; diff checked.
+- Checkpoint: commit containing this note. Next exact phase: 10, safe screenshots of the integrated UI and final German README. Live acceptance / fresh machine / physical DPI remain open; no Main merge or release.
