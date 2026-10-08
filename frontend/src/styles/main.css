@@ -140,6 +140,17 @@ button:disabled { cursor: default; }
 .metric-card strong { font-size: clamp(32px, 3vw, 48px); line-height: 1.25; letter-spacing: -1.3px; font-weight: 600; margin: 8px 0 6px; }
 .metric-card strong.long-value { font-size: 16px; letter-spacing: -.1px; min-height: 56px; display: flex; align-items: center; line-height: 1.4; }
 .metric-card>span { font-size: 10px; color: #748392; }
+.metric-trend { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 600; letter-spacing: 0; margin-top: 5px; }
+.metric-trend.improvement, .metric-card>.metric-trend.improvement { color: #46c893; }
+.metric-trend.deterioration, .metric-card>.metric-trend.deterioration { color: #ff8c98; }
+.metric-trend.neutral { color: var(--muted); }
+:root[data-theme='light'] .metric-trend.improvement { color: #087849; }
+:root[data-theme='light'] .metric-trend.deterioration { color: #b4263b; }
+.mean-detail { grid-column: 1 / -1; font-size: 10px; color: var(--muted); }
+.mean-detail summary { cursor: pointer; }
+.mean-detail p { margin-top: 4px; }
+.metric-card.secondary-metric strong { font-size: 26px; letter-spacing: -.5px; }
+.service-metrics .metric-trend { grid-column: 1 / -1; }
 .metric-card.danger strong { color: #ff6c7a; }
 .volume-card { grid-column: span 8; }
 .service-card { grid-column: span 4; }

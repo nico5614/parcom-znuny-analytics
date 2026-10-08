@@ -6,6 +6,26 @@ const fixtures = JSON.parse(readFileSync(new URL('../.validation/fixtures.json',
 const setup = page => setupDesktop(page, fixtures)
 
 const nav = (page, name) => page.getByRole('navigation', { name: 'Hauptnavigation' }).getByRole('button', { name, exact: true })
+test('backend contexts and compact deltas', async ({ page }) => {
+  test.skip(!fixtures.overview.comparisons, 'Requires the separate analytics contract fixture')
+  await offline(page)
+  const current = page.locator('.kpi-row .metric-card').filter({ has: page.getByText('Aktuell offen', { exact: true }) })
+  await expect(current.getByText(fixtures.overview.metrics.at(-1).contextLabel, { exact: true })).toBeVisible()
+  const closed = page.locator('.kpi-row .metric-card').filter({ has: page.getByText('Geschlossene Tickets', { exact: true }) })
+  await expect(closed.locator('.metric-trend.improvement')).toBeVisible()
+  const service = page.locator('.service-card')
+  await service.getByText('Durchschnitt anzeigen').first().click()
+  await expect(service.getByText(/^Durchschnitt:/).first()).toBeVisible()
+})
+test('honest historical snapshot', async ({ page }) => {
+  test.skip(!fixtures.historicalOverview, 'Requires the separate analytics contract fixture')
+  await setupDesktop(page, { ...fixtures, overview: fixtures.historicalOverview })
+  await page.getByRole('button', { name: 'Lokalen Datenstand öffnen' }).click()
+  const historical = page.locator('.kpi-row .metric-card').filter({ has: page.getByText('Aktuell offen', { exact: true }) })
+  await expect(historical.getByText(/^Stand am /)).toBeVisible()
+  await expect(historical.locator('strong')).toHaveText('–')
+  await expect(historical.locator('.metric-trend')).toHaveCount(0)
+})
 test('login contrast and shared theme before and after authentication', async ({ page }) => {
   await setupDesktop(page, { ...fixtures, initialTheme: 'light' })
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')

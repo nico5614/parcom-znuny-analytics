@@ -4,6 +4,7 @@ import { useResource } from '../hooks/useResource'
 import { Card, MetricCard, Skeleton, Empty } from '../components/Card'
 import { DataTable } from '../components/DataTable'
 import { Chart } from '../charts/Chart'
+import { meanDetail, MetricTrend } from '../components/MetricTrend'
 
 export function Overview({ api, revision, theme, onTicket }: { api: DesktopApi; revision: number; theme: string; onTicket: (id: string) => void }) {
   const load = useCallback(() => api.getOverview(), [api])
@@ -12,7 +13,7 @@ export function Overview({ api, revision, theme, onTicket }: { api: DesktopApi; 
   return <div className="overview-grid">
     <div className="kpi-row">{data.metrics.map(metric => <MetricCard key={metric.label} metric={metric} />)}</div>
     <Card title="Ticketentwicklung" className="volume-card" aside={<span className="metadata">Ausgewählter Zeitraum</span>}><Chart dto={data.volume} height={245} theme={theme} /></Card>
-    <Card title="Servicequalität" className="service-card"><div className="service-metrics">{data.services.map(metric => <div key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.note}</small></div>)}</div></Card>
+    <Card title="Servicequalität" className="service-card"><div className="service-metrics">{data.services.map(metric => <div key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.contextLabel || metric.note}</small>{meanDetail(metric, data.comparisons) && <details className="mean-detail"><summary>Durchschnitt anzeigen</summary><p>{meanDetail(metric, data.comparisons)}</p></details>}<MetricTrend metric={metric} /></div>)}</div></Card>
     <div className="operational-row">{data.operational.map(metric => <MetricCard key={metric.label} metric={metric} />)}</div>
     <Card title="Agentenverteilung" className="distribution-card" aside={<span className="metadata">Aktueller Besitz</span>}><Chart dto={data.agentChart} height={190} theme={theme} /></Card>
     <Card title="Handlungsbedarf" className="action-card" aside={<span className="count-badge">{data.action.total} überfällig</span>}><DataTable dto={data.action} onTicket={onTicket} /><p className="metadata action-note">{data.waitingNote}</p></Card>
