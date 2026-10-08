@@ -37,6 +37,7 @@ def main():
     bridge._publish = lambda event: window.run_js(
         "window.dispatchEvent(new CustomEvent('parcom:desktop', {detail:"
         + json.dumps(json_value(event), ensure_ascii=True, allow_nan=False) + "}));")
+    window.events.closed += bridge._close
 
     def smoke():
         if args.smoke_report is None:

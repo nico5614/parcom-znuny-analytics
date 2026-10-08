@@ -2,9 +2,11 @@ from datetime import datetime, timezone
 import json
 
 import pytest
+from unittest.mock import Mock
 
 from parcom_analytics.web.bridge import DesktopBridge
 from parcom_analytics.web.serialization import json_value
+from parcom_analytics.znuny import LoginError, ConnectionError
 
 
 def test_serialization_preserves_zero_and_normalizes_nonfinite():
@@ -32,3 +34,26 @@ def test_bridge_round_trip_requires_renderer_acknowledgement():
     assert bridge.confirmProbe(1)
     assert bridge._probe_confirmed.is_set()
     assert set(bridge.getAppInfo()) == {"name", "version", "python", "renderer", "packaged"}
+
+
+def test_login_dto_never_returns_credentials_and_logout_cleans_session():
+    client = Mock()
+    client.login.return_value = {"SessionID": "synthetic-session-must-not-leak"}
+    bridge = DesktopBridge(client=client)
+    reply = bridge.login(" test-agent ", "synthetic-password")
+    assert reply == {"ok": True, "data": {"username": "test-agent"}}
+    client.login.assert_called_once_with("test-agent", "synthetic-password")
+    assert "synthetic-password" not in repr(vars(bridge))
+    bridge.logout()
+    client.logout.assert_called_once()
+    assert bridge._username is None
+
+
+@pytest.mark.parametrize("error, kind", [(LoginError("secret"), "authentication"), (ConnectionError("secret"), "network"), (RuntimeError("secret"), "server")])
+def test_login_error_types_are_distinct_and_sanitized(error, kind):
+    client = Mock()
+    client.login.side_effect = error
+    reply = DesktopBridge(client=client).login("test-agent", "synthetic-password")
+    assert not reply["ok"]
+    assert reply["error"]["kind"] == kind
+    assert "secret" not in json.dumps(reply)

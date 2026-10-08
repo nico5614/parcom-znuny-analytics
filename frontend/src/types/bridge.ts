@@ -6,7 +6,11 @@ export interface AppInfo {
   packaged: boolean
 }
 export interface DesktopEvent { kind: 'probe'; message: string; sequence: number }
+export type Result<T> = { ok: true; data: T } | { ok: false; error: { kind: string; message: string } }
+export interface Session { username: string }
 export interface DesktopApi {
+  login(username: string, password: string): Promise<Result<Session>>
+  logout(): Promise<Result<null>>
   getAppInfo(): Promise<AppInfo>
   probe(): Promise<{ sequence: number; sentAt: string }>
   confirmProbe(sequence: number): Promise<boolean>
