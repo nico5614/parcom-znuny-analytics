@@ -40,9 +40,13 @@ Neue und geschlossene Tickets verwenden den gewählten Zeitraum. Offene, eskalie
 
 Alle zwei Minuten prüft eine kleine Suche über `TicketLastChangeTimeNewerDate` auf Änderungen. Bei Treffern erscheint **Neuer Datenstand verfügbar**. Erst ein ausdrücklicher Refresh ersetzt die angezeigten Daten. Netzwerkzugriffe laufen im Hintergrund.
 
+Auf `codex/performance` verwendet der aktive Live-Loader maximal vier parallele Anfragen und einen Ticketcache. Ein Refresh lädt nur geänderte oder neu benötigte Ticketdaten nach; die serverseitigen Auswahlsuchen bleiben für korrekte Bestände und Eskalationen erhalten. Messungen und Integrationshinweise stehen in [PERFORMANCE.md](PERFORMANCE.md).
+
 ## Agentenauswertung
 
 Abschlüsse werden aus der Ticket-Historie dem schliessenden Agenten zugeordnet. Aktueller Besitzer, `ChangeBy` und Sperre ersetzen diese Zuordnung nicht. First Responses verwenden passende Historienereignisse; nicht eindeutig zuordenbare Aktivitäten bleiben unbekannt. **SYSTEM** zählt nicht als menschlicher Agent.
+
+Die Agentenhistorie wird auf dem Performance-Branch erst beim Öffnen von **Agenten** im Hintergrund geladen und je Ticketversion im Arbeitsspeicher wiederverwendet. Bis dahin sind Historienkennzahlen als noch nicht geladen gekennzeichnet. Fehlende Warte-Timer verwenden weiterhin den bestehenden gezielten Historien-Fallback.
 
 Bekannte Kürzel werden verwendet; unbekannte Agenten erhalten ihre ID statt erfundener Kürzel. Team- und Agentenauswahl bleiben nach Neustart erhalten. Abgewählte Agenten verlieren keine Historie. Die Rangfolge zeigt Abschlüsse im Zeitraum und ist kein Qualitätsscore.
 

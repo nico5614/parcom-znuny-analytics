@@ -98,10 +98,10 @@ def test_ticket_get_uses_single_ticket_route_and_requires_matching_id(client):
 
 def test_ticket_get_multiple_ids_calls_single_ticket_route_per_id(client):
     client._http.request.reset_mock()
-    client._http.request.side_effect = [response({"Ticket": [{"TicketID": 1}]}),
-                                        response({"Ticket": [{"TicketID": 2}]})]
+    client._http.request.side_effect = lambda method, url, **kwargs: response(
+        {"Ticket": [{"TicketID": int(url.rsplit("/", 1)[-1])}]})
     assert [item["TicketID"] for item in client.get_tickets([1, 2])] == [1, 2]
-    assert [call.args[:2] for call in client._http.request.call_args_list] == [
+    assert sorted(call.args[:2] for call in client._http.request.call_args_list) == [
         ("GET", BASE_URL + "/Ticket/1"), ("GET", BASE_URL + "/Ticket/2")]
 
 

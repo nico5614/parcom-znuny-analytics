@@ -512,6 +512,8 @@ class MainWindow(QMainWindow):
         self.kpi_changed()
         self.refresh_download_choices()
         self.service_desk.refresh()
+        if self.stack.currentIndex() == 5 and not self.live_cache.batch.history_loaded:
+            self.connection.load_history()
 
     def logout(self):
         self.refresh_after_login = False
@@ -644,6 +646,7 @@ class MainWindow(QMainWindow):
                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
             try:
                 self.live_cache.clear()
+                self.connection.client.clear_cache()
                 self.live_reports = {}
                 self._source_changed()
             except OSError:
@@ -806,6 +809,7 @@ class MainWindow(QMainWindow):
             self.refresh_download_choices()
         elif index == 5:
             self.agent_page.refresh()
+            self.connection.load_history()
         for position, button in enumerate(self.nav_buttons):
             button.setChecked(position == index)
         self.animator.fade(self.stack.currentWidget())

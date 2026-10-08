@@ -129,8 +129,8 @@ class AgentsPage(QScrollArea):
         batch = self.cache.batch
         self.figure.clear()
         axis = self.figure.add_subplot(111)
-        if not batch:
-            self.note.setText("Noch kein Datenstand geladen")
+        if not batch or not batch.history_loaded:
+            self.note.setText("Noch kein Datenstand geladen" if not batch else "Historie noch nicht geladen · wird bei aktiver Verbindung nachgeladen")
             self.ranking_note.setText("")
             for value in self.values.values():
                 value.setText("–")

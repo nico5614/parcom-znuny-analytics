@@ -1,12 +1,13 @@
 """Qt background jobs for login, read-only refresh and best-effort logout."""
 
 import logging
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from threading import Event
 
 from PySide6.QtCore import QObject, QThread, Signal
 
-from .live_data import fetch_live
+from .live_data import fetch_live, load_history, commit_live
 from .znuny import ZnunyClient, ZnunyError
 
 LOGGER = logging.getLogger(__name__)
@@ -31,12 +32,16 @@ class NetworkWorker(QThread):
                 argument = None
                 result = None
             elif self.operation == "refresh":
-                result = fetch_live(self.client, argument, self.cancel, self.progress.emit)
-                if self.cancel.is_set():
-                    raise ZnunyError("Laden abgebrochen.")
-                if self.cache:
-                    self.cache.update(result)
-                    result = self.cache.reports()
+                context = self.client.timings.measure("UsableData") if isinstance(self.client, ZnunyClient) else nullcontext()
+                lock = self.client._refresh_lock if isinstance(self.client, ZnunyClient) else nullcontext()
+                with lock, context:
+                    batch = fetch_live(self.client, argument, self.cancel, self.progress.emit, commit=False)
+                    result = self._publish(batch)
+            elif self.operation == "history":
+                lock = self.client._refresh_lock if isinstance(self.client, ZnunyClient) else nullcontext()
+                with lock:
+                    batch = load_history(self.client, argument, self.cancel, self.progress.emit)
+                    result = self._publish(batch)
             elif self.operation == "check":
                 stamp = datetime.fromisoformat(argument).astimezone(timezone.utc)-timedelta(seconds=1)
                 result = bool(self.client.search_tickets({"TicketLastChangeTimeNewerDate":stamp.strftime("%Y-%m-%d %H:%M:%S"),
@@ -55,6 +60,22 @@ class NetworkWorker(QThread):
             self.failed.emit("Die Daten konnten nicht vollständig geladen werden.")
         finally:
             argument = None
+
+    def _publish(self, batch):
+        if self.cancel.is_set():
+            raise ZnunyError("Laden abgebrochen.")
+        context = self.client.timings.measure("AnalyticsAndCache") if isinstance(self.client, ZnunyClient) else nullcontext()
+        lock = self.client._lock if isinstance(self.client, ZnunyClient) else nullcontext()
+        with lock, context:
+            if isinstance(self.client, ZnunyClient) and batch._state is not None and batch._state.generation != self.client._generation:
+                raise ZnunyError("Die Znuny-Sitzung hat sich geändert. Bitte erneut laden.")
+            if self.cache:
+                self.cache.update(batch, cancel=self.cancel)
+                result = self.cache.reports()
+            else:
+                result = batch
+            commit_live(self.client, batch)
+            return result
 
 
 class ConnectionController(QObject):
@@ -75,6 +96,7 @@ class ConnectionController(QObject):
         self.state = "offline"
         self._logout_pending = False
         self._refresh_pending = None
+        self._history_pending = False
 
     def _set_state(self, state):
         self.state = state
@@ -97,10 +119,25 @@ class ConnectionController(QObject):
         self._start("login", (username, password))
 
     def refresh(self, period):
-        if self.worker and self.worker.operation == "check":
+        if self.worker and self.worker.operation in ("check", "history"):
             self._refresh_pending = period
             return
         self._start("refresh", period)
+
+    def load_history(self):
+        if not self.cache or not self.cache.batch or self.cache.batch.history_loaded:
+            return
+        if self.state != "online" and not self.worker:
+            return
+        if self.worker:
+            self._history_pending = True
+            return
+        # A restored disk snapshot has no raw ticket cache. Refresh it first.
+        if self.cache.batch._state is None:
+            self._history_pending = True
+            self._start("refresh", self.cache.batch.period)
+        else:
+            self._start("history", self.cache.batch)
 
     def check_changes(self):
         if self.state == "online" and self.worker is None and self.cache and self.cache.batch:
@@ -108,6 +145,7 @@ class ConnectionController(QObject):
             self._start("check", batch.load_started_at or batch.captured_at)
 
     def logout(self):
+        self._history_pending = False
         self._refresh_pending = None
         self._set_state("offline")
         if self.worker:
@@ -132,6 +170,7 @@ class ConnectionController(QObject):
                 self.loaded.emit(result)
 
     def _failure(self, message):
+        self._history_pending = False
         self._refresh_pending = None
         self._set_state("offline")
         if not self._logout_pending:
@@ -148,3 +187,6 @@ class ConnectionController(QObject):
         elif self._refresh_pending is not None and self.state == "online":
             period, self._refresh_pending = self._refresh_pending, None
             self._start("refresh",period)
+        elif self._history_pending and self.state == "online":
+            self._history_pending = False
+            self.load_history()

@@ -859,7 +859,8 @@ class ServiceDeskPage(QScrollArea):
                 axis.spines[["top","right","left","bottom"]].set_visible(False)
                 axis.margins(x=.3)
             else:
-                axis.text(.5,.5,"Keine Abschlüsse",ha="center",va="center",transform=axis.transAxes,color="#A6B2BF",fontsize=9)
+                note = "Keine Abschlüsse" if self.live_cache.batch.history_loaded else "Historie unter Agenten laden"
+                axis.text(.5,.5,note,ha="center",va="center",transform=axis.transAxes,color="#A6B2BF",fontsize=9)
             new_report, closed_report = management.kpis[1], management.kpis[2]
             for name, item, lower in (("Neue Tickets",new_report,True),("Geschlossene Tickets",closed_report,False)):
                 if item.comparable and len(item.history)>1:

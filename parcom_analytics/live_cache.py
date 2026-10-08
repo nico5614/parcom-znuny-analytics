@@ -1,6 +1,7 @@
 """Minimal last-run ticket cache and aggregate-only historical observations."""
 
 from dataclasses import asdict, dataclass
+from copy import copy
 from datetime import date, datetime
 import json
 import logging
@@ -92,6 +93,7 @@ class LiveCache:
                     raise ValueError("Incomplete cache")
                 previous = {int(kpi): pd.DataFrame(rows, columns=NORMALIZED_COLUMNS, dtype=object) for kpi,rows in current.get("previous", {}).items()}
                 self.batch = LiveBatch(period, current["captured_at"], frames, previous, current.get("agents", []), current.get("note", ""), current.get("identities", []), current.get("load_started_at", ""))
+                self.batch.history_loaded = current.get("history_loaded", True)
                 self.history, self.periods = payload["history"], payload["periods"]
                 self.reports()
             except (ValueError, KeyError, TypeError, OSError):
@@ -99,7 +101,7 @@ class LiveCache:
                 self.warning = "Der letzte Znuny-Datenstand konnte nicht gelesen werden. Excel-Daten bleiben verfügbar."
                 LOGGER.warning("Live cache could not be read")
 
-    def update(self, batch: LiveBatch):
+    def update(self, batch: LiveBatch, cancel=None):
         # Fully prepare and validate before replacing the previous offline fallback.
         analyses = {kpi: analyze(kpi, frame) for kpi, frame in batch.frames.items()}
         history, periods = dict(self.history), dict(self.periods)
@@ -138,19 +140,26 @@ class LiveCache:
                                           "captured_at": batch.captured_at, "frames": safe_frames,
                                           "previous": {kpi: frame.reindex(columns=NORMALIZED_COLUMNS).astype(object).where(pd.notna(frame), None).to_dict("records") for kpi, frame in batch.previous.items()},
                                           "agents": batch.agents, "note": batch.note, "identities":batch.identities,
-                                          "load_started_at":batch.load_started_at},
+                                          "load_started_at":batch.load_started_at, "history_loaded":batch.history_loaded},
                               "history": history, "periods": periods})
+        candidate = copy(self)
+        candidate.batch, candidate.history, candidate.periods = batch, history, periods
+        candidate._reports = None
+        reports = candidate.reports()
         temporary = self.path.with_suffix(".json.tmp")
         try:
             with temporary.open("w", encoding="utf-8") as output:
                 json.dump(payload, output, ensure_ascii=False, allow_nan=False)
                 output.flush()
                 os.fsync(output.fileno())
+            if cancel is not None and cancel.is_set():
+                from .znuny import ZnunyError
+                raise ZnunyError("Laden abgebrochen.")
             temporary.replace(self.path)
         finally:
             temporary.unlink(missing_ok=True)
         self.batch, self.history, self.periods = batch, history, periods
-        self._reports = None
+        self._reports = reports
 
     def reports(self):
         if self._reports is not None:
