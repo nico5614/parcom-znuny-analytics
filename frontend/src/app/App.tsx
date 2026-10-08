@@ -3,6 +3,7 @@ import { desktop } from '../bridge/client'
 import { Login } from '../pages/Login'
 import { Shell } from './Shell'
 import { useAppearance } from '../hooks/useAppearance'
+import { AnimationContext } from '../hooks/animations'
 import type { AppInfo, DesktopApi, Session } from '../types/bridge'
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
     // Acknowledge only after React committed the Python-triggered state update.
     if (sequence) void desktop().then(api => api.confirmProbe(sequence))
   }, [sequence])
-  if (!session || !api) return <Login api={api} version={info?.version} bridgeError={error || appearance.error} onLogin={setSession} theme={appearance.theme} onTheme={appearance.changeTheme} />
-  return <Shell api={api} session={session} info={info} onLogout={() => setSession(undefined)} appearance={appearance} />
+  const content = !session || !api ? <Login api={api} version={info?.version} bridgeError={error || appearance.error} onLogin={setSession} theme={appearance.theme} onTheme={appearance.changeTheme} />
+    : <Shell api={api} session={session} info={info} onLogout={() => setSession(undefined)} appearance={appearance} />
+  return <AnimationContext.Provider value={appearance.animationsEnabled}>{content}</AnimationContext.Provider>
 }

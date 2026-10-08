@@ -151,6 +151,15 @@ button:disabled { cursor: default; }
 .mean-detail p { margin-top: 4px; }
 .metric-card.secondary-metric strong { font-size: 26px; letter-spacing: -.5px; }
 .service-metrics .metric-trend { grid-column: 1 / -1; }
+.metric-trend { animation: delta-enter .28s ease-out; }
+@keyframes delta-enter { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+.new-data-badge { color: #e7bb67; background: #ffb84d16; border: 1px solid #ffb84d55; border-radius: 5px; padding: 6px 9px; font-size: 11px; white-space: nowrap; }
+:root[data-theme='light'] .new-data-badge { color: #805300; background: #fff2d9; }
+.confirm-dialog { max-width: 460px; }
+.confirm-dialog>p { padding: 20px 24px; color: var(--muted); line-height: 1.7; }
+.tooltip-trigger { position: relative; }
+.tooltip { visibility: hidden; opacity: 0; position: absolute; z-index: 50; top: calc(100% + 12px); right: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); box-shadow: 0 8px 25px #0002; font-size: 11px; white-space: pre; line-height: 1.6; pointer-events: none; }
+.tooltip-trigger:hover .tooltip, .tooltip-trigger:focus .tooltip { visibility: visible; opacity: 1; }
 .metric-card.danger strong { color: #ff6c7a; }
 .volume-card { grid-column: span 8; }
 .service-card { grid-column: span 4; }
@@ -326,7 +335,11 @@ tr.attention td:first-child { border-left: 2px solid #ffb84d; }
   .operational-row .metric-card>span { display: none; }
   .volume-card .chart-wrap { height: 185px !important; }
   .distribution-card .chart-wrap { height: 150px !important; }
-  .service-metrics>div { padding-block: 10px; gap: 3px; }
+  .service-metrics>div { padding-block: 5px; gap: 2px; }
+  .service-metrics span, .service-metrics small, .service-metrics .mean-detail { line-height: 1.3; }
+  .service-metrics small { grid-column: 1; grid-row: 2; }
+  .service-metrics .metric-trend { grid-column: 2; grid-row: 2; justify-self: end; margin: 0; }
+  .service-metrics .mean-detail { grid-column: 1 / -1; margin: 0; }
   .service-metrics strong { font-size: 21px; line-height: 1.2; }
   .overview-grid .card-header { padding-block: 10px; }
   .action-card th { padding-block: 8px; }

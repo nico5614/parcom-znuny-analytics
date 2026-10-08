@@ -2,7 +2,7 @@ export async function setup(page, data) {
   page.on('pageerror', error => console.log('PAGE ERROR:', error.message))
   await page.addInitScript(data => {
     const calls = []
-    const state = { connection: 'cached', busy: false, newData: false, revision: 0, capturedAt: data.capturedAt, hasCache: true, warning: '' }
+    const state = { connection: 'cached', busy: false, newData: false, revision: 0, capturedAt: data.capturedAt, hasCache: true, warning: '', lastSuccessfulConnection: '2026-10-08T10:23:45+02:00' }
     let period = data.periods['1W']
     let preferences = { theme: data.initialTheme || 'dark', reducedMotion: false }
     window.validation = { calls, failRefresh: false, refreshDelay: 0, exportDelay: 0 }
@@ -18,7 +18,7 @@ export async function setup(page, data) {
       login: async (username, password) => { record('login', [username, password.length]); if (username === 'network-error') return { ok: false, error: { kind: 'network', message: 'Znuny ist nicht erreichbar.' } }; if (username !== 'validation' || password !== 'validation') return { ok: false, error: { kind: 'authentication', message: 'Anmeldung fehlgeschlagen.' } }; state.connection = 'online'; return ok({ username }) },
       logout: async () => { record('logout', []); state.connection = 'cached'; return ok(null) },
       resolvePeriod: async selection => { record('resolvePeriod', [selection]); if (selection.preset) return ok(data.periods[selection.preset]); if (selection.start === data.custom.startInput && selection.end === data.custom.endInput) return ok(data.custom); return { ok: false, error: { kind: 'validation', message: 'Mindestens ein Tag ist erforderlich.' } } },
-      refresh: async selection => { record('refresh', [selection]); await new Promise(resolve => setTimeout(resolve, window.validation.refreshDelay)); if (window.validation.failRefresh) return { ok: false, error: { kind: 'network', message: 'Die Znuny-Sitzung ist abgelaufen. Bitte erneut anmelden.' } }; period = selection.preset ? data.periods[selection.preset] : data.custom; state.revision++; return ok({ ...state }) },
+      refresh: async selection => { record('refresh', [selection]); await new Promise(resolve => setTimeout(resolve, window.validation.refreshDelay)); if (window.validation.failRefresh) return { ok: false, error: { kind: 'network', message: 'Die Znuny-Sitzung ist abgelaufen. Bitte erneut anmelden.' } }; period = selection.preset ? data.periods[selection.preset] : data.custom; state.revision++; state.newData = false; return ok({ ...state }) },
       checkChanges: async () => ({ ...state, newData: true }),
       getOverview: async () => { record('getOverview', []); return ok(data.overview) },
       getAnalysis: async (kpi, type, page) => { record('getAnalysis', [kpi, type, page]); return ok(data.analyses[kpi][type || 'all']) },

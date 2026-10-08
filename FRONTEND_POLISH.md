@@ -44,3 +44,26 @@ fake trends are invented. Final integration must bring in the analytics branch.
 Next: chart peaks/maxima, animations/global controls and confirmation dialogs;
 agent winner/override consumer once the analytics contract is available, then
 credentials and installed PDF flow. Phase checkpoint is this entry's commit.
+
+## Phase 3 — charts and global controls
+
+Each line series marks its maximum and draws a dashed guide; bar maxima use a
+stronger fill. Chart.js animates bars/donuts and progressively draws lines.
+Updates reuse charts; changed datasets initialize controllers before reset.
+Global motion preference persists beside theme; Windows reduced motion wins.
+Delta animation is local to changed values. The Info checkbox is removed.
+
+Longer-than-seven-day requests and logout require confirmation; cancellation
+preserves the loaded period/data. New-data detection shows an optional amber
+badge beside refresh. Hover/focus connection detail displays the actual backend
+successful login/sync timestamp, never frontend clock time. Compact service rows
+keep the desktop overview within 1080px. Browser timer simulation starts before
+app initialization to exercise the existing two-minute polling interval.
+
+Validation: 42 frontend tests, 15 focused Python tests, TypeScript/Vite build;
+32 browser scenarios cover four sizes/DPI profiles, confirmations, hover/focus,
+optional refresh, reduced motion and navigation without chart errors.
+
+Next: backend-supplied agent winners/local overrides, secure saved credentials,
+then installed PDF reproduction/fix and final packaging. PDF remains a release
+blocker until the installed native save-dialog flow is verified.

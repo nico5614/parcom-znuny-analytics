@@ -4,6 +4,15 @@ import { useAppearance } from './useAppearance'
 import type { DesktopApi, Preferences } from '../types/bridge'
 
 describe('shared login/dashboard appearance', () => {
+  it('gives system reduced motion priority over an enabled local preference', () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    const view = renderHook(() => useAppearance())
+    expect(view.result.current.animationsEnabled).toBe(false)
+    expect(document.documentElement.dataset.reducedMotion).toBe('true')
+    act(() => view.result.current.changeMotion(false))
+    expect(view.result.current.animationsEnabled).toBe(false)
+    view.unmount(); vi.unstubAllGlobals()
+  })
   it('defaults to light with animations enabled', () => {
     const { result } = renderHook(() => useAppearance())
     expect(result.current.theme).toBe('light')

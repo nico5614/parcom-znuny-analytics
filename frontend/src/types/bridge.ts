@@ -32,7 +32,7 @@ export interface DesktopApi {
   confirmProbe(sequence: number): Promise<boolean>
 }
 export interface Preferences { theme: 'dark' | 'light'; reducedMotion: boolean }
-export interface DataState { connection: 'online' | 'cached' | 'offline'; busy: boolean; newData: boolean; revision: number; capturedAt: string | null; hasCache: boolean; warning: string }
+export interface DataState { connection: 'online' | 'cached' | 'offline'; busy: boolean; newData: boolean; revision: number; capturedAt: string | null; hasCache: boolean; warning: string; lastSuccessfulConnection?: string | null }
 export interface Period { start: string; end: string; startInput: string; endInput: string; label: string; preset: string | null; presets: string[] }
 export type PeriodSelection = { preset: string } | { preset: null; start: string; end: string }
 export interface Comparison {
@@ -43,7 +43,7 @@ export interface Comparison {
   unit?: 'count' | 'minutes' | 'percent'; valueAvailable?: boolean
 }
 export interface Metric extends Omit<Comparison, 'value'> { label: string; value: string; note: string; tone: string; primary?: boolean }
-export interface ChartDto { title: string; kind: 'line' | 'bar' | 'doughnut'; labels: string[]; unitLabel?: string; datasets: { label: string; values: (number | null)[]; color: string }[] }
+export interface ChartDto { title: string; kind: 'line' | 'bar' | 'doughnut'; labels: string[]; unitLabel?: string; datasets: { label: string; values: (number | null)[]; color: string; winnerIndices?: number[] }[] }
 export interface TableDto { columns: { key: string; label: string }[]; rows: { key: string; ticketId?: string | null; cells: string[]; tone: string; maximum?: boolean }[]; total: number; page: number; pageSize: number }
 export interface Overview { comparisons?: Record<string, Comparison>; metrics: Metric[]; operational: Metric[]; services: Metric[]; volume: ChartDto; agentChart: ChartDto; action: TableDto; waitingNote: string; score: { issue: string; status: string; areas: { label: string; value: number }[]; breakdown: { label: string; before: string; after: string; score: string }[]; history: ChartDto } }
 export interface Analysis { title: string; description: string; metrics: Metric[]; chart: ChartDto; history: ChartDto; historyNote: string; comparison: TableDto; types: string[]; typeChart: ChartDto; note: string; highlightNote: string; tableTitle: string; table: TableDto }

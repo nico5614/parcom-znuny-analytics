@@ -12,7 +12,7 @@ export function MetricTrend({ metric }: { metric: Metric }) {
   const sign = metric.delta > 0 ? '+' : metric.delta < 0 ? '−' : '±'
   const arrow = metric.delta > 0 ? '▲' : metric.delta < 0 ? '▼' : '→'
   const meaning = metric.trend === 'improvement' ? 'Verbesserung' : metric.trend === 'deterioration' ? 'Verschlechterung' : 'Unverändert'
-  return <span className={`metric-trend ${metric.trend || 'neutral'}`} title={`Vergleich: ${meaning}`} aria-label={`${meaning}: ${sign}${amount}`}><span aria-hidden="true">{arrow}</span> {sign}{amount}</span>
+  return <span key={`${metric.delta}:${metric.snapshotAt || ''}`} className={`metric-trend ${metric.trend || 'neutral'}`} title={`Vergleich: ${meaning}`} aria-label={`${meaning}: ${sign}${amount}`}><span aria-hidden="true">{arrow}</span> {sign}{amount}</span>
 }
 export function meanDetail(metric: Metric, comparisons?: Record<string, Comparison>) {
   const mean = comparisons?.[metric.label.replace('Median', 'Durchschnitt')]?.value

@@ -13,6 +13,9 @@ const paths = {
   close: 'M6 6l12 12 M6 18L18 6',
   clock: 'M12 7v5l3 2 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0',
   chevron: 'M9 5l7 7-7 7',
+  play: 'M8 4l12 8-12 8z',
+  pause: 'M8 5v14 M16 5v14',
+  crown: 'M3 7l5 4 4-7 4 7 5-4-2 12H5z M5 16h14',
 } as const
 export type IconName = keyof typeof paths
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
