@@ -54,3 +54,32 @@ Legacy monthly Excel scoring and its export report remain compatible.
 Validation: 76 focused Python tests passed, including unchanged score weighting,
 current/previous interval scores, restart persistence, zeros and invalid values.
 Continue with human-agent discovery, ranking, abbreviations and local overrides.
+
+## Phase 3 — agent analytics and persistent local overrides
+
+- Discovery uses observed PBX/PBX Intern owners and history actors plus previously
+  saved PBX observations. Seed/identity mappings provide names, not membership;
+  unrelated users and SYSTEM do not enter the human registry. Unknown login-only
+  identities retain an explicit unknown abbreviation instead of an invented name.
+- Ranking/winner use actual history-derived `ClosedByID`, never Owner. Rankings
+  are global among observed humans, independent of the team filter. All positive
+  ties are winners (`periodWinners`); `periodWinner` is present only for a unique
+  winner. No closes or unloaded history yield no winner. The overview does not
+  trigger history loading merely to produce a winner.
+- Agent rows add `displayName`, `abbreviation`, `rank`, `isPeriodWinner`,
+  `medianResponseMinutes`, `meanResponseMinutes`, `responseComparison` and
+  `meanResponseComparison` for the previous equal interval. Median remains primary.
+- Known manual seed codes stay authoritative, including Lewin Roos = LRO.
+  Otherwise automatic codes use first initial + first two surname letters after
+  diacritic transliteration. Local manual overrides take priority.
+- Bridge methods: `getAgentOverride`, `setAgentDisplayName`,
+  `setAgentAbbreviation`, `resetAgentOverride`. Accept a discovered AgentID or a
+  uniquely mapped login; persist `name`/`code` under the stable ID in local
+  `settings.ini`. Reset removes local overrides and restores known/automatic values.
+  No Znuny user writes or credentials are stored. Overrides survive restart and
+  are never baked back into the base discovery registry.
+
+Validation: 74 focused Python tests passed, including human/SYSTEM attribution,
+global ranking/ties, discovery scope, Unicode abbreviations, override persistence
+and the existing incremental/lazy-history suite. Continue with final cross-contract
+review, full Python suite and performance request-count verification.

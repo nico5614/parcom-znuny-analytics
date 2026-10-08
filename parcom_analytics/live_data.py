@@ -333,10 +333,12 @@ def attribute_history(client, tickets, period, cancel):
             raise ZnunyError("Die Tickethistorie von Znuny ist ungültig.")
         owner = identity(ticket.get("OwnerID"), ticket.get("Owner"))
         if owner:
+            owner["pbxObserved"] = True
             identities[owner["id"]] = owner
         for event in history:
             actor = identity(event.get("CreateBy"))
             if actor and actor["id"] not in identities:
+                actor["pbxObserved"] = True
                 identities[actor["id"]] = actor
         responder, response_time = response_actor(ticket, history)
         for key, start, end in (("current", period.start, period.end), ("previous", previous_start, previous_end)):
@@ -348,7 +350,7 @@ def attribute_history(client, tickets, period, cancel):
                                "ResponseAt":response_time.isoformat() if response_in_period else None})
             if closed_time or response_in_period:
                 activity.append({"TicketID":ticket_id, "Ticket#":ticket.get("TicketNumber"), "Titel":ticket.get("Title"),
-                                 "Typ":ticket.get("Type"), "Status":ticket.get("State"), "period":key,
+                                 "Typ":ticket.get("Type"), "Status":ticket.get("State"), "Queue":ticket.get("Queue"), "period":key,
                                  "ClosedByID":closer, "ResponseByID":responder if response_in_period else None,
                                  "ClosedAt":closed_time.isoformat() if closed_time else None,
                                  "ResponseAt":response_time.isoformat() if response_in_period else None,

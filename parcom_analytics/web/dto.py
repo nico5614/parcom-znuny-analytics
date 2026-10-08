@@ -170,12 +170,11 @@ def analysis_dto(cache, kpi, ticket_type=None, page=0):
                        "tableTitle": result.table_title, "table": table(result.details, result, page)})
 
 
-def identities(cache, settings):
-    registry = {key: agents.identity(key) for key in agents.SEED_AGENTS if key != "1"}
-    registry.update(settings.get("agent_registry", {}))
-    if cache.batch:
-        registry.update({item["id"]: item for item in cache.batch.identities if item["id"] != "1"})
-    return registry
+def identities(cache, settings, apply_overrides=True):
+    registry = agents.discover(cache.batch, settings.get("agent_registry", {}))
+    overrides = settings.get("agent_overrides", {}) if apply_overrides else {}
+    return {key: agents.resolved_identity(item, overrides.get(key)) if apply_overrides else item
+            for key, item in registry.items()}
 
 
 def selected_agents(cache, settings):
@@ -184,12 +183,14 @@ def selected_agents(cache, settings):
 
 def agent_rows(cache, settings, agent_id=None):
     chosen = {agent_id} if agent_id else selected_agents(cache, settings)
-    rows = agents.metrics(cache.batch, sorted(chosen))
     registry = identities(cache, settings)
+    # Rank against every observed human, regardless of the frontend's team filter.
+    rows = [row for row in agents.metrics(cache.batch, sorted(registry)) if row["id"] in chosen]
     for row in rows:
         item = registry[row["id"]]
+        row.update({"displayName": item["name"], "abbreviation": item["code"], "Techniker": item["code"]})
         row["label"] = item["code"] if not item["code"].startswith("ID ") else (item["login"] or item["code"]) + " · Kürzel nicht zugeordnet"
-    return sorted(rows, key=lambda row: (-row["Geschlossen"], row["label"]))
+    return sorted(rows, key=lambda row: (-(row["Geschlossen"] or 0), row["label"]))
 
 
 def agents_dto(cache, settings, agent_id=None, page=0):
@@ -200,21 +201,30 @@ def agents_dto(cache, settings, agent_id=None, page=0):
     rows = agent_rows(cache, settings, agent_id)
     batch = cache.batch
     activity = pd.DataFrame(batch.agents)
+    if not activity.empty and "Queue" in activity:
+        from ..znuny import DEFAULT_QUEUES
+        activity = activity.loc[activity["Queue"].isin(DEFAULT_QUEUES) | activity["Queue"].isna()]
     current = activity.loc[activity["period"].eq("current")] if not activity.empty else activity
     response = current.loc[current["ResponseByID"].isin(chosen)] if not current.empty else current
     from ..analytics import numeric_values
-    median = numeric_values(response["response_minutes"]).median() if not response.empty else None
-    cards = [metric(name, sum(row[name] for row in rows), "Aktueller Bestand" if name in ("Aktuell im Besitz", "Davon gesperrt") else "Ausgewählter Zeitraum")
+    times = numeric_values(response["response_minutes"]).dropna() if not response.empty else []
+    median = float(times.median()) if len(times) else None
+    mean = float(times.mean()) if len(times) else None
+    cards = [metric(name, sum(row[name] for row in rows) if all(row[name] is not None for row in rows) else "–", snapshot_context(batch)["contextLabel"] if name in ("Aktuell im Besitz", "Davon gesperrt") else "Ausgewählter Zeitraum")
              for name in ("Aktuell im Besitz", "Davon gesperrt", "Geschlossen", "Erstantworten")]
     cards.append(metric("Median Reaktionszeit", format_duration(median), "Ereignisbasierte Erstantworten"))
+    cards[-1].update({"median": median if batch.history_loaded else None,
+                     "mean": mean if batch.history_loaded else None, "primaryStatistic": "median"})
     owned = batch.frames[3].loc[batch.frames[3]["OwnerID"].map(str).isin(chosen)].copy()
+    if not snapshot_context(batch)["snapshotIsNow"]:
+        owned = owned.iloc[:0]
     events = current.loc[current["ClosedByID"].isin(chosen) | current["ResponseByID"].isin(chosen)].copy() if not current.empty else current
     combined = pd.concat([owned, events], ignore_index=True).groupby("TicketID", sort=False, dropna=False).first().reset_index()
     for source, target in (("OwnerID", "Besitzer"), ("ClosedByID", "Geschlossen durch"), ("ResponseByID", "Erste Antwort")):
-        combined[target] = combined[source].map(agents.code) if source in combined else "–"
+        combined[target] = combined[source].map(lambda value: registry.get(str(value), {}).get("code", agents.code(value))) if source in combined else "–"
     details = combined.reindex(columns=["Ticket#", "Titel", "Typ", "Status", "Besitzer", "Sperre", "Geschlossen durch", "Erste Antwort"])
     details.attrs["ticket_ids"] = dict(zip(combined["Ticket#"].map(str), combined["TicketID"].map(str)))
-    most = max((row["Geschlossen"] for row in rows), default=0)
+    most = max((row["Geschlossen"] or 0 for row in rows), default=0)
     leaders = " / ".join(row["label"] for row in rows if row["Geschlossen"] == most)
     system = int(current["ClosedByID"].eq("1").sum()) if not current.empty else 0
     unknown = int(batch.frames[2]["ClosedByID"].isna().sum())
@@ -224,7 +234,13 @@ def agents_dto(cache, settings, agent_id=None, page=0):
             card["value"] = "–"
         for row in rows:
             row["Geschlossen"] = row["Erstantworten"] = row["Reaktionszeit (Min.)"] = None
+    # Include a winner outside the selected team, too.
+    global_rows = agents.metrics(batch, sorted(registry))
+    winners = [{**row, "displayName": registry[row["id"]]["name"], "abbreviation": registry[row["id"]]["code"]}
+               for row in global_rows if row["isPeriodWinner"]]
     return json_value({"registry": list(sorted(registry.values(), key=lambda item: item["name"])), "selected": sorted(selected_agents(cache, settings)),
+                       "periodWinner": winners[0] if len(winners) == 1 else None, "periodWinners": winners,
+                       "winnerAvailable": batch.history_loaded, **bounds(batch.period),
                        "historyLoaded": batch.history_loaded,
                        "metrics": cards, "rows": rows, "note": f"{len(chosen)} Techniker · SYSTEM-Abschlüsse: {system} · Unbekannte Abschlüsse: {unknown}" if batch.history_loaded else history_note,
                        "rankingNote": history_note if not batch.history_loaded else f"Meiste Abschlüsse im Zeitraum: {leaders} · {most} Tickets" if most else "Keine menschlichen Abschlüsse für die Auswahl vorhanden.",
@@ -275,8 +291,13 @@ def overview(cache, settings):
         agent_chart["labels"] = []
         agent_chart["datasets"][0]["values"] = []
         action = action.iloc[:0]
+    registry = identities(cache, settings)
+    winners = [{**row, "displayName": registry[row["id"]]["name"], "abbreviation": registry[row["id"]]["code"]}
+               for row in agents.metrics(cache.batch, sorted(registry)) if row["isPeriodWinner"]]
     return json_value({"metrics": top, "operational": operational, "services": services,
                        "comparisons": semantic, **bounds(cache.batch.period), "volume": volume,
+                       "periodWinner": winners[0] if len(winners) == 1 else None, "periodWinners": winners,
+                       "winnerAvailable": cache.batch.history_loaded,
                        "agentChart": agent_chart, "action": table(action, page=0, size=5),
                        "waitingNote": " · ".join(f"{name}: {metrics.get(name, '–')}" for name in ("Aktive Timer", "Ohne Timer", "Timer unbekannt", "Automatisches Schliessen vorgemerkt")) if is_current else "Historische operative Ticketdetails sind nicht verfügbar.",
                        "score": {**selected_score, "issue": selected_score["issue"] or "100 % = keine Verschlechterung; keine SLA-Bewertung.",
