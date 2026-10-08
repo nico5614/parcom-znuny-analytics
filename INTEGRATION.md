@@ -47,3 +47,10 @@
 - Real PBX/PBX Intern data validation and all production REST timings remain unverified; no synthetic timing is presented as live measurement.
 - Per the integration order, this pending acceptance does not block independent visual/packaging work. Main merge and release remain gated on live acceptance.
 - Phase 4 checkpoint: `3c08964`. Next: Phase 6, inspect the integrated React renderings at desktop/compact sizes and available simulated scaling.
+
+## Phase 6 — visual acceptance completed within available environment
+
+- Reviewed actual integrated React screenshots from Phase 3: desktop overview/agents, compact 1050-wide analysis and 150% simulated overview. Sidebar, dense card grid, chart hierarchy, active states and scrollable tables match the new frontend composition; no PySide presentation is used.
+- All 8 browser checks passed at 1920x1080, 1050x650 and simulated 125%/150% scaling, including loading navigation and reduced motion. Native WebView2 startup/bridge was independently verified in Phase 4.
+- No visual code changes required. A physical monitor DPI transition and fresh Windows installation remain unverified, not represented by browser scaling.
+- Phase 5 checkpoint: `c9c2673`. Next: Phase 7, production frontend/frozen bundle; preserve PDF worker isolation and sanitize PATH. Use the final requested EXE name and verify before starting installer work.
