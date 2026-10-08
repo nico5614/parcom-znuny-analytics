@@ -153,6 +153,7 @@ def test_selected_score_uses_original_weights_and_comparison(tmp_path, qapp):
     assert "Score:Exportmonat" not in text
     # A valid previous score in the same month is never mistaken for a missing current score.
     restored.batch.frames[5].loc[0, "Erstantwortzeit in Minuten"] = None
+    restored.update(restored.batch)
     assert restored.performance().current is None
     assert restored.selected_performance()["value"] is None
 
@@ -178,12 +179,14 @@ def test_score_zero_is_valid_and_invalid_duration_blocks_score(tmp_path):
         cache.update(batch)
     assert cache.selected_performance()["value"] == 100
     cache.batch.frames[5].loc[0, "Erstantwortzeit in Minuten"] = None
+    cache.update(cache.batch)
     assert cache.selected_performance()["value"] is None
 
 
 def test_open_and_waiting_old_stock_are_distinct(cache):
     cache.batch.frames[3]["Alter"] = "0 m"
     cache.batch.frames[7]["Alter"] = "50000 m"
+    cache.update(cache.batch)
     comparisons = overview_comparisons(cache)
     assert comparisons["Offene Tickets >30 Tage"]["value"] == 0
     assert comparisons["Wartende Tickets >30 Tage"]["value"] == 18
@@ -217,3 +220,17 @@ def test_selected_endpoint_included_previous_shared_boundary_excluded():
     activity, _ = attribute_history(client, {"2": raw[1]}, period, Event())
     assert len(activity) == 1 and activity[0]["period"] == "current"
     assert activity[0]["ClosedByID"] == activity[0]["ResponseByID"] == "61"
+
+
+def test_legacy_date_range_cache_still_opens_offline(tmp_path):
+    from parcom_analytics.live_data import DateRange
+    from parcom_analytics.web.bridge import DesktopBridge
+    batch = validation_batch()
+    batch.period = DateRange(batch.period.start.date(), batch.period.end.date())
+    batch.previous = {}  # Legacy DateRange caches predate equal-interval frame loading.
+    cache = LiveCache(tmp_path)
+    cache.update(batch)
+    bridge = DesktopBridge(root=tmp_path)
+    assert bridge.continueOffline()["ok"]
+    assert bridge.getOverview()["ok"]
+    assert bridge.getAnalysis(4)["ok"]

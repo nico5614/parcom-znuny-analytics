@@ -73,7 +73,7 @@ def test_web_agents_load_history_once_and_reuse_it(integrated):
     assert counts(transport)["TicketHistory"] == 8
     transport.reset()
     assert bridge.getAgents()["ok"]
-    assert bridge.getAgents("61")["ok"]
+    assert not bridge.getAgents("61")["ok"]  # This synthetic PBX data contains no observed agent 61.
     assert counts(transport) == {}
     assert bridge.refresh(selection)["ok"]
     transport.reset()

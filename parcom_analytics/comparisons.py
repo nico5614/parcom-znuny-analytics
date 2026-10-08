@@ -1,7 +1,7 @@
 """Numeric comparison semantics; never fetch history to infer stock changes."""
 
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .analytics import numeric_values
 from .live_metrics import analyze_live, operational_metrics
@@ -38,7 +38,11 @@ def durations(frame, column):
 
 
 def bounds(period):
-    start, end = period.previous
+    if isinstance(period, TimeRange):
+        start, end = period.previous
+    else:
+        end = period.start
+        start = end - (period.end - period.start + timedelta(days=1))
     return {"selectedPeriod": {"start": period.start.isoformat(), "end": period.end.isoformat()},
             "comparisonPeriod": {"start": start.isoformat(), "end": end.isoformat()}}
 
@@ -69,7 +73,7 @@ def snapshot_analysis(cache, kpi, endpoint):
 
 def analyses_at_end(cache):
     batch = cache.batch
-    current = {kpi: analyze_live(kpi, frame, batch.period) for kpi, frame in batch.frames.items()}
+    current = {kpi: report.analysis for kpi, report in cache.reports().items()}
     if isinstance(batch.period, TimeRange) and not snapshot_context(batch)["snapshotIsNow"]:
         for kpi in SNAPSHOT_KPIS:
             current[kpi] = snapshot_analysis(cache, kpi, batch.period.end)
@@ -85,7 +89,7 @@ def kpi_comparisons(cache, kpi, ticket_type=None):
         current_frame = batch.frames[kpi]
     if kpi in SNAPSHOT_KPIS:
         context = snapshot_context(batch)
-        current = analyze_live(kpi, current_frame, batch.period) if context["snapshotIsNow"] else (
+        current = (cache.reports()[kpi].analysis if ticket_type is None else analyze_live(kpi, current_frame, batch.period)) if context["snapshotIsNow"] else (
             snapshot_analysis(cache, kpi, batch.period.end) if ticket_type is None else None)
         previous = snapshot_analysis(cache, kpi, batch.period.start) if ticket_type is None else None
         if kpi == 4:
@@ -151,6 +155,8 @@ def selected_report(cache):
     from .live_cache import restore_analysis
     from .service_desk import Period, Report, fill_period, score_period
     batch, period = cache.batch, cache.batch.period
+    if not isinstance(period, TimeRange):
+        return cache.performance()
     previous_start, previous_end = period.previous
     duration = previous_end.astimezone(timezone.utc) - previous_start.astimezone(timezone.utc)
     older_start = (previous_start.astimezone(timezone.utc) - duration).astimezone(ZURICH)

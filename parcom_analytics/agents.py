@@ -74,7 +74,7 @@ def discover(batch, registry=None):
     if batch:
         for frame in (*batch.frames.values(), *batch.previous.values()):
             scoped = frame.loc[frame["Queue"].isin(DEFAULT_QUEUES)]
-            for row in scoped.to_dict("records"):
+            for row in scoped.reindex(columns=["OwnerID", "OwnerLogin", "ClosedByID", "ResponseByID"]).drop_duplicates().to_dict("records"):
                 for column in ("OwnerID", "ClosedByID", "ResponseByID"):
                     key = identifier(row.get(column))
                     if key and key != "1":
@@ -189,11 +189,15 @@ def metrics(batch, selected):
         if row["Geschlossen"] != last_count:
             rank, last_count = index, row["Geschlossen"]
         row["rank"] = rank if batch.history_loaded else None
+        row["historyLoaded"] = batch.history_loaded
         row["isPeriodWinner"] = bool(batch.history_loaded and most > 0 and row["Geschlossen"] == most)
         if not snapshot_context(batch)["snapshotIsNow"]:
             row["Aktuell im Besitz"] = row["Davon gesperrt"] = None
         if not batch.history_loaded:
-            for key in ("Geschlossen", "Erstantworten", "Reaktionszeit (Min.)", "medianResponseMinutes", "meanResponseMinutes"):
+            # Legacy Qt consumers sort numeric counts before masking unloaded history.
+            # The WebView DTO masks these compatibility fields explicitly below.
+            row["Geschlossen"] = row["Erstantworten"] = 0
+            for key in ("Reaktionszeit (Min.)", "medianResponseMinutes", "meanResponseMinutes"):
                 row[key] = None
             row["responseComparison"] = comparison(None, unit="minutes")
             row["meanResponseComparison"] = comparison(None, unit="minutes")

@@ -103,3 +103,59 @@ Validation: 141 Python tests passed across new analytics/agent cases, live cache
 snapshot semantics, shared reports, original score tests and WebView/PDF exports.
 Remaining: final performance/compatibility review, complete Python suite, clean
 branch/remote verification. No React layout or packaging changes were made.
+
+## Phase 5 — final verification and handoff
+
+Complete Python suite: **324 passed in 86.27 seconds**. Command, from this checkout:
+
+```powershell
+& 'C:\Users\nicokoechli\Documents\ChatGPT\PARCOM\.venv314\Scripts\python.exe' -m pytest -q -o cache_dir=.validation/cache --basetemp .validation/full-final-324
+```
+
+Final compatibility fixes keep numeric compatibility counts for legacy Qt sorting
+while WebView DTOs explicitly mask unloaded history with null / `–`, no winner,
+and availability flags. Legacy DateRange caches remain readable offline. Comparison
+and score code reuse prepared cached analyses; discovery reads only distinct
+identity columns rather than copying all ticket fields repeatedly.
+
+Synthetic performance comparison against the exact integration commit
+`118fb47280dacf93f98eb67713338bf451ae0c0d` (40 tickets, 20 ms/request) confirms
+identical request counts, rows, existing KPI metrics and charts:
+
+| Operation | TicketSearch | TicketGet | TicketHistory | Peak concurrent requests |
+| --- | ---: | ---: | ---: | ---: |
+| Initial load | 7 | 40 | 0 | 4 |
+| Unchanged refresh | 8 | 0 | 0 | 1 |
+| Refresh, 4 changed tickets | 8 | 4 | 0 | 4 |
+| First history demand | 1 | 0 | 40 | 4 |
+| History after unchanged refresh | 1 | 0 | 0 | 1 |
+| History after 4 changed tickets | 1 | 0 | 4 | 4 |
+
+Existing persistence, HTTP connection reuse, request deduplication, ticket/delta
+cache and lazy/versioned history cache are retained. Comparisons and winner DTOs
+do not initiate network calls. The original missing-pending-timer history fallback
+is retained. Timing files are local ignored validation artifacts; these are not
+measurements of the real Znuny server.
+
+Final integration notes / limitations:
+
+- The DTO deliberately retains formatted card `value` strings; consume
+  `numericValue` or numeric `comparisons` for arithmetic. Trends come from Python.
+- Snapshot context is classified at load time. Offline replay retains that
+  recorded endpoint and classification; `capturedAt` still identifies cache age.
+- The REST routes provide current stock. Without an exact saved historical
+  endpoint, historical stock is unavailable, never inferred from current tickets.
+  Without an exact start snapshot, stock deltas and the unchanged full-formula
+  score are unavailable. A previous score needs the earlier interval as well.
+- Historical aggregate snapshots cannot supply per-type/per-agent stock or
+  historical ticket-detail tables. These fields are explicitly unavailable.
+- Login-only unknown identities cannot supply a verified full name automatically;
+  local overrides provide that name and an automatic/manual abbreviation.
+- Existing history-derived actor/event selection and current PBX queue scope are
+  preserved. No user-directory enumeration or new Znuny write routes were added.
+- Backend fields and local edit methods are ready for the frontend specialist;
+  this branch does not change React source/assets or rebuild installer/packaging.
+
+All phases are committed and pushed to `codex/analytics-polish`. The integration
+branch remains at the requested baseline; no merge was performed. The final exact
+HEAD is recorded in the chat handoff and can be read with `git rev-parse HEAD`.

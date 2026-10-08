@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .analytics import Analysis, DataError, analyze, date_values
+from .analytics import Analysis, DataError, analyze, date_values, format_value
 from .live_metrics import analyze_live, operational_metrics
 from .periods import TimeRange
 from .live_data import DateRange, LiveBatch, NORMALIZED_COLUMNS, TIMEZONE
@@ -260,12 +260,9 @@ class LiveCache:
         result = management_report(reports, self.performance())
         if isinstance(self.batch.period, TimeRange):
             result.metrics.update({key:str(value) for key,value in operational_metrics(self.batch).items()})
-            from .comparisons import overview_comparisons, snapshot_context
-            semantics = overview_comparisons(self)
-            for label, key in (("Offene Tickets", "Aktuell offen"), ("Wartende Tickets", "Wartende Tickets"),
-                               ("Offene Tickets >30 Tage", "Offene Tickets >30 Tage"), ("Eskalationsquote", "Eskalationsquote")):
-                value = semantics[key]["value"]
-                result.metrics[label] = "–" if value is None else (f"{value:.1f} %" if key == "Eskalationsquote" else str(int(value)))
+            from .comparisons import snapshot_context
+            rate = reports[4].analysis.references["escalation_rate"]
+            result.metrics["Eskalationsquote"] = f"{format_value(rate)} %" if math.isfinite(rate) else "–"
             if not snapshot_context(self.batch)["snapshotIsNow"]:
                 saved = self.observations.get(self.batch.period.end.isoformat(), {}).get("operational", {})
                 result.metrics.update({key: str(saved[key]) if key in saved else "–" for key in operational_metrics(self.batch)})
