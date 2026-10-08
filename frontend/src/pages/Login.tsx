@@ -40,6 +40,7 @@ export function Login({ api, version, onLogin, bridgeError }: { api?: DesktopApi
           <button type="submit" className="primary login-submit" disabled={!api || busy}>{busy ? <><span className="spinner" />Anmeldung läuft …</> : <>Anmelden<Icon name="arrow" size={18} /></>}</button>
         </form>
         <p className="login-security"><Icon name="shield" size={16} />Ihr Passwort wird nicht gespeichert.</p>
+        {api && <button className="offline-link" disabled={busy} onClick={async () => { setBusy(true); try { const reply = await api.continueOffline(); if (reply.ok) onLogin(reply.data); else setError(reply.error.message) } catch { setError('Die Desktop-Verbindung wurde unterbrochen.') } finally { setBusy(false) } }}>Lokalen Datenstand öffnen</button>}
       </div>
       <footer>ParCom Systems AG <span>Analytics {version || '…'}</span></footer>
     </section>

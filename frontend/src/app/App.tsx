@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { desktop } from '../bridge/client'
 import { Login } from '../pages/Login'
-import { Brand } from '../components/Brand'
+import { Shell } from './Shell'
 import type { AppInfo, DesktopApi, Session } from '../types/bridge'
 
 export default function App() {
@@ -27,5 +27,5 @@ export default function App() {
     if (sequence) void desktop().then(api => api.confirmProbe(sequence))
   }, [sequence])
   if (!session || !api) return <Login api={api} version={info?.version} bridgeError={error} onLogin={setSession} />
-  return <main className="p-8"><Brand /><h1 className="mt-10 text-3xl">Übersicht</h1><p className="muted mt-3">Angemeldet als {session.username}</p><p className="muted mt-8">Noch kein Datenstand geladen.</p><button className="primary mt-8" onClick={async () => { await api.logout(); setSession(undefined) }}>Logout</button></main>
+  return <Shell api={api} session={session} info={info} onLogout={() => setSession(undefined)} />
 }

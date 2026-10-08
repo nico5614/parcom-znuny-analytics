@@ -17,7 +17,7 @@ describe('Znuny login', () => {
     fill()
     expect(login).toHaveBeenCalledWith('test-agent', 'synthetic-password')
     expect(screen.getByLabelText('Passwort')).toHaveValue('')
-    expect(screen.getByRole('button')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Anmeldung läuft …' })).toBeDisabled()
     finish({ ok: true, data: { username: 'test-agent' } })
     await waitFor(() => expect(onLogin).toHaveBeenCalledWith({ username: 'test-agent' }))
   })

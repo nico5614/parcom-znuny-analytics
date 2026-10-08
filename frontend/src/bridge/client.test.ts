@@ -5,13 +5,21 @@ import type { DesktopApi } from '../types/bridge'
 afterEach(() => { delete window.pywebview; vi.useRealTimers() })
 describe('desktop readiness', () => {
   it('resolves an already available API', async () => {
-    const api = {} as DesktopApi
+    const api = { getAppInfo: vi.fn() } as unknown as DesktopApi
     window.pywebview = { api }
     expect(await desktop()).toBe(api)
   })
   it('waits for the actual pywebviewready event', async () => {
     const result = desktop()
-    const api = {} as DesktopApi
+    const api = { getAppInfo: vi.fn() } as unknown as DesktopApi
+    window.pywebview = { api }
+    window.dispatchEvent(new Event('pywebviewready'))
+    expect(await result).toBe(api)
+  })
+  it('waits when WebView has created an empty API before injecting methods', async () => {
+    window.pywebview = { api: {} as DesktopApi }
+    const result = desktop()
+    const api = { getAppInfo: vi.fn() } as unknown as DesktopApi
     window.pywebview = { api }
     window.dispatchEvent(new Event('pywebviewready'))
     expect(await result).toBe(api)

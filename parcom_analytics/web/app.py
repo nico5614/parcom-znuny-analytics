@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import platform
 import sys
+import tempfile
 
 from .bridge import DesktopBridge
 from .serialization import json_value
@@ -19,6 +20,9 @@ def asset_root():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--smoke-report", type=Path)
+    parser.add_argument("--validation", action="store_true", help="Isolated synthetic data, never connects to Znuny")
+    parser.add_argument("--width", type=int, default=1280)
+    parser.add_argument("--height", type=int, default=800)
     args = parser.parse_args()
     if sys.platform != "win32":
         raise RuntimeError("This desktop host requires Windows WebView2.")
@@ -31,8 +35,15 @@ def main():
     webview.settings["ALLOW_FILE_URLS"] = False
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = False
     bridge = DesktopBridge()
+    if args.validation:
+        from ..live_cache import LiveCache
+        from .validation import ValidationClient, validation_batch
+        root = Path(tempfile.mkdtemp(prefix="parcom-web-validation-"))
+        cache = LiveCache(root)
+        cache.update(validation_batch())
+        bridge = DesktopBridge(client=ValidationClient(), root=root, cache=cache, fetch=validation_batch)
     window = webview.create_window("ParCom Analytics", str(entry), js_api=bridge,
-                                   width=1280, height=800, min_size=(900, 600),
+                                   width=args.width, height=args.height, min_size=(900, 600),
                                    background_color="#08111B", text_select=True)
     bridge._publish = lambda event: window.run_js(
         "window.dispatchEvent(new CustomEvent('parcom:desktop', {detail:"
