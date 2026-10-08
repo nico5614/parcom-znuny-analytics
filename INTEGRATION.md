@@ -40,3 +40,10 @@
 - Qt modules and Qt DLLs in the host were empty before and after PDF export. Report: ignored `.validation/integration-source.json`.
 - UI interaction coverage: 8 passing browser checks from Phase 3 cover login/error distinction, navigation, all analyses, timeline custom/snap, agents/team, details, export, logout, cache and navigation during pending requests. Native smoke verifies the actual renderer/bridge; browser checks use controlled synthetic IPC.
 - No source fixes required in this phase. Next: Phase 5, record availability of interactive live acceptance, then Phase 6 visual review.
+
+## Phase 5 — live acceptance pending, 8 October 2026
+
+- No interactive personal Znuny login is available in this run. No credentials were searched, stored or requested in chat.
+- Real PBX/PBX Intern data validation and all production REST timings remain unverified; no synthetic timing is presented as live measurement.
+- Per the integration order, this pending acceptance does not block independent visual/packaging work. Main merge and release remain gated on live acceptance.
+- Phase 4 checkpoint: `3c08964`. Next: Phase 6, inspect the integrated React renderings at desktop/compact sizes and available simulated scaling.
