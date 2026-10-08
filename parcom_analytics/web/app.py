@@ -40,10 +40,12 @@ def main():
     if args.validation:
         from ..live_cache import LiveCache
         from .validation import ValidationClient, validation_batch
+        from .credentials import CredentialStore
         root = Path(tempfile.mkdtemp(prefix="parcom-web-validation-"))
         cache = LiveCache(root)
         cache.update(validation_batch())
-        bridge = DesktopBridge(client=ValidationClient(), root=root, cache=cache, fetch=validation_batch)
+        bridge = DesktopBridge(client=ValidationClient(), root=root, cache=cache, fetch=validation_batch,
+                               credential_store=CredentialStore(service="ParCom.ZnunyAnalytics.Validation." + root.name))
     server, url = serve(entry.parent)
     window = webview.create_window("ParCom Analytics", url, js_api=bridge,
                                    width=args.width, height=args.height, min_size=(900, 600),

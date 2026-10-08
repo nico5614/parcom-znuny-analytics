@@ -13,7 +13,7 @@ from .serialization import json_value
 
 
 class DesktopBridge:
-    def __init__(self, publish=lambda event: None, client=None, root=None, cache=None, settings=None, fetch=None, choose_save=None):
+    def __init__(self, publish=lambda event: None, client=None, root=None, cache=None, settings=None, fetch=None, choose_save=None, credential_store=None):
         self._publish = publish
         self._lock = Lock()
         self._probe_sequence = 0
@@ -35,8 +35,10 @@ class DesktopBridge:
         self._choose_save = choose_save
         self._export_lock = Lock()
         self._last_successful_connection = None
+        from .credentials import CredentialStore
+        self._credentials = credential_store or CredentialStore()
 
-    def login(self, username, password):
+    def login(self, username, password, save_credentials=False):
         from ..znuny import ZnunyClient, LoginError, ConnectionError, ZnunyError
         if not isinstance(username, str) or not username.strip() or not isinstance(password, str) or not password:
             return {"ok": False, "error": {"kind": "validation", "message": "Bitte Benutzername und Passwort eingeben."}}
@@ -54,7 +56,13 @@ class DesktopBridge:
                 self._username = username.strip()
                 self._offline = False
                 self._last_successful_connection = datetime.now(timezone.utc).isoformat()
-            return {"ok": True, "data": {"username": self._username}}
+            session = {"username": self._username}
+            if save_credentials is True:
+                try:
+                    self._credentials.save(self._username, password)
+                except Exception:
+                    session["credentialWarning"] = "Angemeldet. Die Zugangsdaten konnten nicht im Windows-Schlüsselspeicher gespeichert werden."
+            return {"ok": True, "data": session}
         except LoginError:
             return {"ok": False, "error": {"kind": "authentication", "message": "Anmeldung fehlgeschlagen. Bitte Benutzername und Passwort prüfen."}}
         except ConnectionError:
@@ -66,6 +74,28 @@ class DesktopBridge:
         finally:
             password = None
             self._network.release()
+
+    def getSavedCredentials(self):
+        try:
+            return self._credentials.status()
+        except Exception:
+            return {"supported": False, "available": False, "username": None}
+
+    def loginSaved(self):
+        try:
+            credential = self._credentials.get()
+            if credential is None:
+                return self._error("credentials", "Keine gespeicherten Zugangsdaten vorhanden.")
+            return self.login(credential.username, credential.password)
+        except Exception:
+            return self._error("credentials", "Die gespeicherten Zugangsdaten sind nicht verfügbar.")
+
+    def removeSavedCredentials(self):
+        try:
+            self._credentials.remove()
+            return {"ok": True, "data": None}
+        except Exception:
+            return self._error("credentials", "Die gespeicherten Zugangsdaten konnten nicht entfernt werden.")
 
     def logout(self):
         self._cancel.set()

@@ -15,6 +15,7 @@ export async function setup(page, data) {
       confirmProbe: async () => true,
       getState: async () => ({ ...state }), getPeriod: async () => ({ ...period }),
       getPreferences: async () => preferences, setPreferences: async (theme, reducedMotion) => { preferences = { theme, reducedMotion }; return ok(null) },
+      getSavedCredentials: async () => ({ supported: true, available: false, username: null }),
       continueOffline: async () => ok({ username: 'Offline' }),
       login: async (username, password) => { record('login', [username, password.length]); if (username === 'network-error') return { ok: false, error: { kind: 'network', message: 'Znuny ist nicht erreichbar.' } }; if (username !== 'validation' || password !== 'validation') return { ok: false, error: { kind: 'authentication', message: 'Anmeldung fehlgeschlagen.' } }; state.connection = 'online'; return ok({ username }) },
       logout: async () => { record('logout', []); state.connection = 'cached'; return ok(null) },

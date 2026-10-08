@@ -7,7 +7,8 @@ export interface AppInfo {
 }
 export interface DesktopEvent { kind: 'probe'; message: string; sequence: number }
 export type Result<T> = { ok: true; data: T } | { ok: false; error: { kind: string; message: string } }
-export interface Session { username: string }
+export interface Session { username: string; credentialWarning?: string }
+export interface SavedCredentials { supported: boolean; available: boolean; username: string | null }
 export interface DesktopApi {
   getState(): Promise<DataState>
   getPeriod(): Promise<Period>
@@ -29,7 +30,10 @@ export interface DesktopApi {
   openTicket(ticketId: string): Promise<Result<null>>
   refresh(selection: PeriodSelection): Promise<Result<DataState>>
   checkChanges(): Promise<DataState>
-  login(username: string, password: string): Promise<Result<Session>>
+  login(username: string, password: string, saveCredentials?: boolean): Promise<Result<Session>>
+  getSavedCredentials?(): Promise<SavedCredentials>
+  loginSaved?(): Promise<Result<Session>>
+  removeSavedCredentials?(): Promise<Result<null>>
   logout(): Promise<Result<null>>
   getAppInfo(): Promise<AppInfo>
   probe(): Promise<{ sequence: number; sentAt: string }>

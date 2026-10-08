@@ -90,3 +90,67 @@ setup refresh had errors`, including after a kernel reset. Do not describe the
 native save dialog as verified from smoke tests that bypass it. The registry's
 production path `C:\Dev\ParCom Znuny Analytics\` does not exist on this host;
 use the independent validation installer identity instead of replacing user data.
+
+## Phase 5 — opt-in Windows credentials and checkpoint
+
+Login saving defaults off. Python uses `keyring.backends.Windows.WinVaultKeyring`
+explicitly, with local-machine persistence, never backend autodetection or a
+plaintext fallback. Only availability/support/username cross back to React;
+saved-password retrieval stays Python-side. Successful authentication is required
+before saving. Replacing an identity first removes its old vault entry to avoid
+keyring's compound backup copies. Removal remains available independently of the
+save checkbox. A vault failure leaves normal login working and reports a warning.
+No password enters settings, cache, browser storage or application logs. Validation
+mode uses its own unique vault target and never accesses the production target.
+
+Implementation references: [keyring documentation](https://keyring.readthedocs.io/en/latest/)
+and [official Windows backend](https://github.com/jaraco/keyring/blob/main/keyring/backends/Windows.py).
+Dependencies are pinned in `requirements-web.txt`.
+
+Validation: 46 frontend tests, 36 browser scenarios, TypeScript/Vite build and
+288 full Python tests passed. The native Windows-vault regression creates only a
+unique synthetic test entry; save/replace/remove succeeds, old passwords are no
+longer accessible and cleanup runs in `finally`. Browser profiles cover
+1920×1080, 1050×650 and simulated 125%/150% DPI. Desktop overview fits 1080px;
+team popup, light/dark dashboard, analyses and agents retain the approved layout.
+
+PDF investigation: the existing integrated payload passed isolated installer,
+upgrade, installed startup, overview PDF, analysis 5 PDF and uninstall at
+`.validation/installer-ee04014649474a5895d911ed91408821/result.json`.
+Its smoke report `.validation/web-bundle-27c399953b7f40189681632575429aaa.json`
+shows no PySide/shiboken modules or Qt6 Core/Gui/Widgets DLLs before/after export.
+The test bypasses the native save dialog. Consequently the reported installed
+save error is **not reproduced/fixed**, and PDF remains a release blocker.
+Native UI automation is unavailable because its helper fails during sandbox
+initialization. No unrelated application or real credentials were used.
+
+The final source WebView host and separate worker were rebuilt with sanitized
+PATH. The frozen host archive includes Windows keyring and the credentials
+module, and excludes PySide/shiboken. Final bundled frontend files match source
+build SHA-256 hashes. The complete bundle startup/overview PDF/analysis PDF probe
+passed with no Node/Python on PATH and no Qt modules/DLLs in the host:
+`.validation/web-bundle-b70f11d1acde427992f03d08111dc1c4.json`.
+This final bundle has not yet been validated through the native save dialog or
+packaged into a new production installer. Existing `dist/release` setup remains
+the previous integrated payload, not the polish release.
+
+Changed files in this phase: `web/credentials.py`, `web/bridge.py`, `web/app.py`,
+`requirements-web.txt`, Login/Info/Shell, bridge types, login styles and focused
+Python/frontend tests. Earlier phases contain appearance, metric semantics,
+Chart.js highlights/animations, confirmations and employee/team components.
+
+Checkpoint stop: account remaining usage reached 15%; finish this phase's build,
+test, commit/push only. Do not start another large phase. Do not merge.
+
+Required continuation:
+1. Restore Windows UI automation, then reproduce the full React → native save →
+   worker flow in a separately registered installation using synthetic data.
+   Test spaces, Desktop/Documents, cancel, overwrite and both report types.
+2. Capture worker path/cwd/environment/return code/stderr/output existence, identify
+   the real cause, implement a focused fix and installed-flow regression. Generic
+   error-message changes alone are insufficient. Qt stays exclusively in worker.
+3. Confirm packaged secure-login behavior and rebuild a complete installer from
+   the final source, retaining the independent validation identity for tests.
+4. Integration must combine the analytics DTO/override branch with this frontend;
+   this branch does not copy/merge its backend. Tested exported contract was
+   `9da9eba2293dee606d43688ff0fbbe38b0abed52`.
