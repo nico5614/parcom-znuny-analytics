@@ -44,17 +44,22 @@ class SessionExpired(ZnunyError):
 
 class ZnunyClient:
     def __init__(self, transport=None, concurrency=4):
-        if type(concurrency) is not int or not 1 <= concurrency <= 6:
-            raise ValueError("Concurrency must be between 1 and 6")
+        if type(concurrency) is not int or not 1 <= concurrency <= 4:
+            raise ValueError("Concurrency must be between 1 and 4")
         self.concurrency = concurrency
         self._lock = RLock()
+        self._refresh_lock = RLock()
+        self._live_state = None
+        self._history_cache = {}
+        self._history_revision = {}
         self._generation = 0
         self._inflight = {}
         self.timings = Timings()
         # A requests.Session has mutable cookies. Lease each persistent session
         # exclusively; never share one Session concurrently across worker threads.
-        self._sessions = LifoQueue(maxsize=concurrency)
-        for _ in range(concurrency):
+        self._slot_count = 1 if isinstance(transport, requests.Session) else concurrency
+        self._sessions = LifoQueue(maxsize=self._slot_count)
+        for _ in range(self._slot_count):
             http = transport if transport is not None else requests.Session()
             http.trust_env = False
             if transport is None:
@@ -85,7 +90,8 @@ class ZnunyClient:
             http = self._sessions.get()
             try:
                 with self._lock:
-                    if operation.startswith("Ticket") and (generation != self._generation or not self._session_id):
+                    if operation.startswith("Ticket") and (generation != self._generation or not self._session_id
+                                                            or data.get("SessionID") != self._session_id):
                         raise SessionExpired("Die Znuny-Sitzung ist abgelaufen. Bitte erneut anmelden.")
                 response = http.request(method, BASE_URL + path, **request_data,
                                         timeout=timeout, verify=True, allow_redirects=False)
@@ -95,7 +101,7 @@ class ZnunyClient:
                 if operation.startswith("Ticket") and generation != self._generation:
                     raise SessionExpired("Die Znuny-Sitzung ist abgelaufen. Bitte erneut anmelden.")
             if response.status_code in (401, 403):
-                self._auth_error(operation)
+                self._auth_error(operation, generation)
             if not 200 <= response.status_code < 300:
                 raise ConnectionError("Keine Verbindung zu Znuny möglich.")
             payload = response.json()
@@ -105,21 +111,34 @@ class ZnunyClient:
                 error = payload["Error"]
                 code = str(error.get("ErrorCode", "")) if isinstance(error, dict) else ""
                 if any(word in code.lower() for word in ("auth", "session", "accessdenied")):
-                    self._auth_error(operation)
+                    self._auth_error(operation, generation)
                 raise ZnunyError("Die Daten konnten nicht vollständig geladen werden.")
-            self.connected = bool(self._session_id)
+            with self._lock:
+                if operation.startswith("Ticket") and generation != self._generation:
+                    raise SessionExpired("Die Znuny-Sitzung ist abgelaufen. Bitte erneut anmelden.")
+                self.connected = bool(self._session_id)
             return payload
         except (requests.RequestException, ValueError):
-            self.connected = False
+            with self._lock:
+                if generation == self._generation:
+                    self.connected = False
             raise ConnectionError("Keine Verbindung zu Znuny möglich.") from None
         except ZnunyError:
-            self.connected = False
+            with self._lock:
+                if generation == self._generation:
+                    self.connected = False
             raise
 
-    def _auth_error(self, operation):
+    def _auth_error(self, operation, generation=None):
         with self._lock:
+            if generation is not None and generation != self._generation:
+                raise SessionExpired("Die Znuny-Sitzung ist abgelaufen. Bitte erneut anmelden.")
             self._session_id = None
+            self.connected = False
             self._generation += 1
+            self._live_state = None
+            self._history_cache.clear()
+            self._history_revision.clear()
         if operation == "SessionCreate":
             raise LoginError("Anmeldung fehlgeschlagen. Benutzername oder Passwort prüfen.")
         raise SessionExpired("Die Znuny-Sitzung ist abgelaufen. Bitte erneut anmelden.")
@@ -127,6 +146,11 @@ class ZnunyClient:
     def login(self, username, password):
         if self._session_id:
             self.logout()
+        with self._lock:
+            self._generation += 1
+            self._live_state = None
+            self._history_cache.clear()
+            self._history_revision.clear()
         try:
             payload = self._request("SessionCreate", data={"UserLogin": username, "Password": password})
             session_id = payload.get("SessionID")
@@ -148,6 +172,9 @@ class ZnunyClient:
         with self._lock:
             session_id, self._session_id = self._session_id, None
             self._generation += 1
+            self._live_state = None
+            self._history_cache.clear()
+            self._history_revision.clear()
             self.connected = False
         try:
             if session_id:
@@ -157,6 +184,24 @@ class ZnunyClient:
         finally:
             session_id = None
             self.connected = False
+            # Controller shutdown waits for active workers before logout.
+            # Lease all slots here as well for callers using the API directly.
+            sessions = [self._sessions.get() for _ in range(self._slot_count)]
+            try:
+                for http in sessions:
+                    if isinstance(http, requests.Session):
+                        http.close()
+                        http.cookies.clear()
+            finally:
+                for http in sessions:
+                    self._sessions.put(http)
+
+    def clear_cache(self):
+        with self._lock:
+            self._generation += 1
+            self._live_state = None
+            self._history_cache.clear()
+            self._history_revision.clear()
 
     def search_tickets(self, filters=None, limit=SEARCH_LIMIT):
         payload = self._request("TicketSearch", data={**(filters or {}), **self._auth(), "Queues": list(DEFAULT_QUEUES),
@@ -195,6 +240,8 @@ class ZnunyClient:
                 # Consumers can safely annotate their own returned data.
                 return deepcopy(future.result(timeout=.05))
             except TimeoutError:
+                if future.done():
+                    raise
                 continue
 
     def get_tickets(self, ticket_ids, cancel=None):
@@ -234,10 +281,34 @@ class ZnunyClient:
             raise ZnunyError("Die Ticketantwort von Znuny ist ungültig.")
         return item
 
-    def get_history(self, ticket_id):
+    def invalidate_history(self, ticket_ids):
+        with self._lock:
+            for ticket_id in ticket_ids:
+                self._history_cache.pop(ticket_id, None)
+                self._history_revision[ticket_id] = self._history_revision.get(ticket_id, 0) + 1
+
+    def get_history(self, ticket_id, *, changed=None, cancel=None):
         if not re.fullmatch(r"\d+", str(ticket_id)):
             raise ValueError("Invalid ticket ID")
-        return self._shared("TicketHistoryGet", str(ticket_id), lambda: self._get_history(ticket_id))
+        ticket_id = str(ticket_id)
+        if cancel is not None and cancel.is_set():
+            raise ZnunyError("Laden abgebrochen.")
+        self._auth()
+        with self._lock:
+            generation = self._generation
+            revision = self._history_revision.get(ticket_id, 0)
+            cached = self._history_cache.get(ticket_id)
+            if changed and cached and cached[:2] == (changed, revision):
+                return deepcopy(cached[2])
+
+        def load():
+            history = self._get_history(ticket_id)
+            with self._lock:
+                if changed and generation == self._generation and revision == self._history_revision.get(ticket_id, 0):
+                    self._history_cache[ticket_id] = (changed, revision, deepcopy(history))
+            return history
+
+        return self._shared("TicketHistoryGet", (ticket_id, changed, revision), load, cancel)
 
     def _get_history(self, ticket_id):
         payload = self._request("TicketHistoryGet", str(ticket_id), data=self._auth())

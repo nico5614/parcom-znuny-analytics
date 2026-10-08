@@ -15,7 +15,7 @@ def connected(transport, concurrency=4):
     return client
 
 
-@pytest.mark.parametrize("limit", [4, 6])
+@pytest.mark.parametrize("limit", [1, 4])
 def test_parallel_limit_order_duplicates_and_zero_values(limit):
     transport = BenchmarkTransport(latency=.03)
     client = connected(transport, limit)
@@ -123,3 +123,13 @@ def test_timings_contain_only_safe_operation_aggregates():
     assert stats["TicketGet"]["failures"] == 0
     assert set(stats["TicketGet"]) == {"count", "seconds", "failures", "average_seconds"}
     assert "synthetic" not in repr(stats)
+
+
+def test_injected_requests_session_is_never_used_concurrently():
+    transport = BenchmarkTransport(latency=.01)
+    session = requests.Session()
+    session.request = transport.request
+    client = connected(session)
+    assert len(client.get_tickets(range(1, 9))) == 8
+    assert transport.maximum == 1
+    client.logout()
