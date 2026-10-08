@@ -1,6 +1,6 @@
 """Minimal last-run ticket cache and aggregate-only historical observations."""
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from copy import copy
 from datetime import date, datetime
 import json
@@ -194,6 +194,17 @@ class LiveCache:
         batch, reports = self.batch, {}
         for kpi, frame in batch.frames.items():
             analysis = analyze_live(kpi, frame, batch.period) if isinstance(batch.period, TimeRange) else analyze(kpi, frame)
+            historical = False
+            if isinstance(batch.period, TimeRange) and kpi in {3, 4, 7}:
+                from .comparisons import snapshot_context, snapshot_analysis
+                historical = not snapshot_context(batch)["snapshotIsNow"]
+                if historical:
+                    saved = snapshot_analysis(self, kpi, batch.period.end)
+                    analysis = saved or replace(analysis,
+                        metrics={key: float("nan") if isinstance(value, (int, float)) else "–" for key, value in analysis.metrics.items()},
+                        references={key: float("nan") for key in analysis.references},
+                        chart=pd.Series(dtype=float), details=analysis.details.iloc[:0], row_highlights=[], maximum_rows=set(),
+                        note="Kein exakter Snapshot für diesen Endzeitpunkt verfügbar.")
             monthly = kpi in MONTHLY_KPIS
             single_month = (batch.period.start.day == 1 and
                             batch.period.end == (pd.Timestamp(batch.period.start) + pd.offsets.MonthEnd()).date())
@@ -217,12 +228,23 @@ class LiveCache:
                 old_analysis = analyze(kpi, batch.previous[kpi])
                 history = [HistoryPoint(old_record, old_analysis), HistoryPoint(record, analysis)]
                 note = "Vergleich mit dem direkt vorhergehenden, gleich langen Zeitraum."
+            if isinstance(batch.period, TimeRange) and kpi in {3, 4, 7}:
+                context = snapshot_context(batch)
+                record = replace(record, export_timestamp=batch.period.end.isoformat() if historical else batch.captured_at)
+                old = snapshot_analysis(self, kpi, batch.period.start)
+                history = [HistoryPoint(record, analysis)]
+                if old:
+                    history.insert(0, HistoryPoint(replace(record, export_timestamp=batch.period.start.isoformat()), old))
+                note = context["contextLabel"] + ". Delta nur mit exaktem Start-Snapshot."
             reports[kpi] = KpiReport(record, analysis, history, note, "Znuny Live · lokal gespeicherter Datenstand",
-                                     comparable=kpi in batch.previous or not monthly or single_month)
+                                     comparable=old is not None if isinstance(batch.period, TimeRange) and kpi in {3, 4, 7} else kpi in batch.previous or not monthly or single_month)
         self._reports = reports
         return reports
 
     def performance(self):
+        if self.batch is not None and isinstance(self.batch.period, TimeRange):
+            from .comparisons import selected_report
+            return selected_report(self)
         periods = [Period(**{**item, "records": {int(kpi): LiveRecord(**record) for kpi, record in item["records"].items()}})
                    for _, item in sorted(self.periods.items())]
         return compare_periods(periods)
@@ -238,6 +260,15 @@ class LiveCache:
         result = management_report(reports, self.performance())
         if isinstance(self.batch.period, TimeRange):
             result.metrics.update({key:str(value) for key,value in operational_metrics(self.batch).items()})
+            from .comparisons import overview_comparisons, snapshot_context
+            semantics = overview_comparisons(self)
+            for label, key in (("Offene Tickets", "Aktuell offen"), ("Wartende Tickets", "Wartende Tickets"),
+                               ("Offene Tickets >30 Tage", "Offene Tickets >30 Tage"), ("Eskalationsquote", "Eskalationsquote")):
+                value = semantics[key]["value"]
+                result.metrics[label] = "–" if value is None else (f"{value:.1f} %" if key == "Eskalationsquote" else str(int(value)))
+            if not snapshot_context(self.batch)["snapshotIsNow"]:
+                saved = self.observations.get(self.batch.period.end.isoformat(), {}).get("operational", {})
+                result.metrics.update({key: str(saved[key]) if key in saved else "–" for key in operational_metrics(self.batch)})
         return result
 
     def clear(self):

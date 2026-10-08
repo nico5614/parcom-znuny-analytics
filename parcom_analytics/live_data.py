@@ -191,15 +191,15 @@ def fetch_period(client, period, cancel, progress):
             raise ZnunyError("Die Suchgrenze wurde erreicht. Bitte einen kleineren Zeitraum wählen.")
         return result
 
-    def dated(name, start, end):
+    def dated(name, start, end, include_end=False):
         return {f"Ticket{name}TimeNewerDate": start.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-                f"Ticket{name}TimeOlderDate": end.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                f"Ticket{name}TimeOlderDate": (end.astimezone(timezone.utc) + timedelta(seconds=1 if include_end else 0)).strftime("%Y-%m-%d %H:%M:%S"),
                 "SearchInArchive": "AllTickets"}
 
     previous_start, previous_end = period.previous
     selections = {
-        "new": search(dated("Create", period.start, period.end)),
-        "closed": search({**dated("Close", period.start, period.end), "StateType": "closed"}),
+        "new": search(dated("Create", period.start, period.end, include_end=True)),
+        "closed": search({**dated("Close", period.start, period.end, include_end=True), "StateType": "closed"}),
         "open": search({"StateType": list(OPEN_TYPES)}),
         "waiting": search({"StateType": "pending reminder"}),
         "escalated": search({"StateType": list(OPEN_TYPES), "TicketEscalationTimeOlderMinutes": 1}),
@@ -263,7 +263,7 @@ def fetch_period(client, period, cancel, progress):
                 start, end = (previous_start, previous_end) if key.startswith("previous") else (period.start, period.end)
                 if stamp is None:
                     raise ZnunyError("Znuny liefert Tickets ohne gültiges Erstellungs- oder Schliessdatum.")
-                if not start <= stamp < end:
+                if not (start <= stamp < end or (not key.startswith("previous") and stamp == end)):
                     continue
             rows.append(ticket)
         return normalize_tickets(rows)
@@ -342,8 +342,8 @@ def attribute_history(client, tickets, period, cancel):
                 identities[actor["id"]] = actor
         responder, response_time = response_actor(ticket, history)
         for key, start, end in (("current", period.start, period.end), ("previous", previous_start, previous_end)):
-            closer, closed_time = closed_event(history, start, end, mapping)
-            response_in_period = response_time is not None and start <= response_time < end
+            closer, closed_time = closed_event(history, start, end, mapping, include_end=key == "current")
+            response_in_period = response_time is not None and (start <= response_time < end or (key == "current" and response_time == end))
             if key == "current":
                 ticket.update({"ClosedByID":closer, "ClosedAt":closed_time.isoformat() if closed_time else None,
                                "ResponseByID":responder if response_in_period else None,

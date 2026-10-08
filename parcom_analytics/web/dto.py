@@ -10,7 +10,7 @@ from .. import agents
 from ..analytics import analyze, detail_value, field_label, format_duration, format_value, metric_items
 from ..live_metrics import analyze_live, server_datetime
 from ..periods import PRESETS, TimeRange, ZURICH
-from ..reports import HistoryPoint, comparison_label, comparison_rows, history_metrics, history_value
+from ..reports import HistoryPoint, comparison_label, history_metrics, history_value
 from ..storage import period_label
 from ..service_desk import score_status
 from ..comparisons import bounds, kpi_comparisons, overview_comparisons, snapshot_context, snapshot_analysis
@@ -115,7 +115,6 @@ def analysis_dto(cache, kpi, ticket_type=None, page=0):
     report = filtered_report(cache, kpi, ticket_type)
     result = report.analysis
     from ..analytics import KPI_TITLES, KPI_DESCRIPTIONS
-    comparisons = table(comparison_rows(report))
     histories = []
     for name, (_, unit) in history_metrics(result).items():
         histories.append({"label": name, "values": [history_metrics(point.analysis).get(name, (None, unit))[0] if point.analysis is not None else None for point in report.history], "color": "#4C8DFF" if histories else "#8B6CFF"})
@@ -164,7 +163,7 @@ def analysis_dto(cache, kpi, ticket_type=None, page=0):
                        "metrics": cards, "primaryStatistic": "median" if kpi in {5, 6} else None,
                        "comparisons": semantic, **bounds(cache.batch.period),
                        "chart": chart(result), "history": {"title": "Entwicklung", "kind": "line", "labels": labels, "datasets": histories, "unitLabel": {"minutes": "Minuten", "percent": "%", "count": "Tickets"}[next(iter(history_metrics(result).values()))[1]]},
-                       "historyNote": report.history_note + " " + comparison_label(report), "comparison": comparisons,
+                       "historyNote": report.history_note + " " + ("Delta nur mit exaktem Start-Snapshot; keine Schätzung aus benachbarten Beobachtungen." if kpi in {3, 4, 7} else comparison_label(report)), "comparison": comparisons,
                        "types": list(TYPES), "typeChart": {"title": "Tickettypen", "kind": "bar", "labels": types.index.tolist(), "datasets": [{"label": "Tickets", "values": types.values.tolist(), "color": "#32D5FF"}]},
                        "note": result.note, "highlightNote": result.highlight_note,
                        "tableTitle": result.table_title, "table": table(result.details, result, page)})
@@ -206,6 +205,8 @@ def agents_dto(cache, settings, agent_id=None, page=0):
         activity = activity.loc[activity["Queue"].isin(DEFAULT_QUEUES) | activity["Queue"].isna()]
     current = activity.loc[activity["period"].eq("current")] if not activity.empty else activity
     response = current.loc[current["ResponseByID"].isin(chosen)] if not current.empty else current
+    if not response.empty:
+        response = response.drop_duplicates("TicketID")
     from ..analytics import numeric_values
     times = numeric_values(response["response_minutes"]).dropna() if not response.empty else []
     median = float(times.median()) if len(times) else None
@@ -215,6 +216,9 @@ def agents_dto(cache, settings, agent_id=None, page=0):
     cards.append(metric("Median Reaktionszeit", format_duration(median), "Ereignisbasierte Erstantworten"))
     cards[-1].update({"median": median if batch.history_loaded else None,
                      "mean": mean if batch.history_loaded else None, "primaryStatistic": "median"})
+    for item in cards[:2]:
+        item.update({**snapshot_context(batch), "metricType": "snapshot", "deltaAvailable": False,
+                     "snapshotAvailable": snapshot_context(batch)["snapshotIsNow"]})
     owned = batch.frames[3].loc[batch.frames[3]["OwnerID"].map(str).isin(chosen)].copy()
     if not snapshot_context(batch)["snapshotIsNow"]:
         owned = owned.iloc[:0]
@@ -276,7 +280,7 @@ def overview(cache, settings):
                    "datasets": [{"label": "Aktuell im Besitz", "values": [row["Aktuell im Besitz"] for row in rows], "color": "#4C8DFF"}]}
     waiting = management.kpis[7].analysis
     details = waiting.details
-    action = details.loc[details["Timer"].eq("Überfällig")].copy()
+    action = details.loc[details["Timer"].eq("Überfällig")].copy() if "Timer" in details else details.copy()
     action.attrs = details.attrs.copy()
     action = action[[column for column in ("Ticket#", "Titel", "Besitzer", "Timer", "Sperre") if column in action]]
     selected_score = cache.selected_performance()

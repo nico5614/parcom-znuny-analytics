@@ -79,7 +79,7 @@ def discover(batch, registry=None):
                     key = identifier(row.get(column))
                     if key and key != "1":
                         observed.add(key)
-                        if column == "OwnerID" and row.get("OwnerLogin"):
+                        if column == "OwnerID" and isinstance(row.get("OwnerLogin"), str) and row["OwnerLogin"]:
                             logins[key] = row["OwnerLogin"]
         for row in batch.agents:
             if row.get("Queue") not in (*DEFAULT_QUEUES, None):
@@ -109,11 +109,11 @@ def state_types(tickets):
     return result
 
 
-def closed_event(history, start, end, mapping):
+def closed_event(history, start, end, mapping, *, include_end=False):
     qualifying = []
     for event in history:
         stamp = server_datetime(event.get("CreateTime"))
-        if event.get("HistoryType") != "StateUpdate" or not stamp or not start <= stamp < end:
+        if event.get("HistoryType") != "StateUpdate" or not stamp or not (start <= stamp < end or (include_end and stamp == end)):
             continue
         parts = [part for part in str(event.get("Name", "")).split("%%") if part]
         target = parts[-1] if parts else ""
@@ -160,8 +160,14 @@ def metrics(batch, selected):
         current = activity.loc[activity["period"].eq("current")] if not activity.empty else activity
         closed = current.loc[current["ClosedByID"].map(str).eq(agent_id)] if not current.empty else current
         responses = current.loc[current["ResponseByID"].map(str).eq(agent_id)] if not current.empty else current
+        if not current.empty:
+            closed = closed.drop_duplicates("TicketID")
+            responses = responses.drop_duplicates("TicketID")
         times = numeric_values(responses["response_minutes"]).dropna() if not responses.empty else []
         previous = activity.loc[activity["period"].eq("previous") & activity["ResponseByID"].map(str).eq(agent_id)] if not activity.empty else activity
+        if not previous.empty:
+            previous = previous.drop_duplicates("TicketID")
+        old_closed = activity.loc[activity["period"].eq("previous") & activity["ClosedByID"].map(str).eq(agent_id)].drop_duplicates("TicketID") if not activity.empty else activity
         old_times = numeric_values(previous["response_minutes"]).dropna() if not previous.empty else []
         response_median = float(median(times)) if len(times) else None
         response_mean = float(sum(times) / len(times)) if len(times) else None
@@ -173,7 +179,9 @@ def metrics(batch, selected):
                      "Reaktionszeit (Min.)":response_median,
                      "medianResponseMinutes":response_median, "meanResponseMinutes":response_mean,
                      "responseComparison":comparison(response_median, old_median, unit="minutes"),
-                     "meanResponseComparison":comparison(response_mean, old_mean, unit="minutes")})
+                     "meanResponseComparison":comparison(response_mean, old_mean, unit="minutes"),
+                     "closedComparison":comparison(len(closed), len(old_closed), higher_is_better=True),
+                     "responseCountComparison":comparison(len(responses), len(previous), higher_is_better=True)})
     rows.sort(key=lambda row: (-row["Geschlossen"], row["id"]))
     most = max((row["Geschlossen"] for row in rows), default=0)
     rank, last_count = 0, None
@@ -189,4 +197,6 @@ def metrics(batch, selected):
                 row[key] = None
             row["responseComparison"] = comparison(None, unit="minutes")
             row["meanResponseComparison"] = comparison(None, unit="minutes")
+            row["closedComparison"] = comparison(None, higher_is_better=True)
+            row["responseCountComparison"] = comparison(None, higher_is_better=True)
     return rows

@@ -129,3 +129,14 @@ def test_rename_unknown_agent_derives_abbreviation_without_overwriting_manual(da
     assert identities(cache, settings)["99"]["code"] == "EMU"
     settings.set({"agent_overrides": {"99": {"name": "Other Person", "code": "CUS"}}})
     assert identities(cache, settings)["99"]["code"] == "CUS"
+
+
+def test_agent_counts_are_unique_tickets_and_median_handles_long_tail(data):
+    cache, settings = data
+    cache.batch.agents.extend([
+        dict(cache.batch.agents[0]),
+        {**cache.batch.agents[0], "TicketID": "900", "ClosedByID": None, "response_minutes": 1000}])
+    winner = agents_dto(cache, settings)["periodWinner"]
+    assert winner["Geschlossen"] == 2 and winner["Erstantworten"] == 3
+    assert winner["medianResponseMinutes"] == 10
+    assert winner["meanResponseMinutes"] == pytest.approx(1010 / 3)

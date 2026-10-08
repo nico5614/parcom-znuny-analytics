@@ -122,6 +122,8 @@ def overview_comparisons(cache):
         else:
             if kpi == 4:
                 values.pop("Aktuell offen", None)
+            if kpi in {3, 7}:
+                values["Offene Tickets >30 Tage" if kpi == 3 else "Wartende Tickets >30 Tage"] = values.pop("Älter als 30 Tage")
             result.update(values)
     batch = cache.batch
     new, closed = len(batch.frames[1]), len(batch.frames[2])
@@ -137,7 +139,6 @@ def overview_comparisons(cache):
             current[name] = int(batch.frames[3]["Sperre"].eq("Gesperrt").sum())
         result[name] = comparison(current.get(name), previous.get(name), metric_type="snapshot",
                                   valueAvailable=name in current, **context)
-    result["Offene Tickets >30 Tage"] = result.pop("Älter als 30 Tage")
     return result
 
 
@@ -145,12 +146,11 @@ def interval_key(start, end):
     return start.astimezone(timezone.utc).isoformat() + "/" + end.astimezone(timezone.utc).isoformat()
 
 
-def selected_performance(cache):
+def selected_report(cache):
     """Same seven components/five area weights, applied to exact selected bounds."""
     from .live_cache import restore_analysis
-    from .service_desk import METRICS, Period, fill_period, score_period
+    from .service_desk import Period, Report, fill_period, score_period
     batch, period = cache.batch, cache.batch.period
-    selected = bounds(period)
     previous_start, previous_end = period.previous
     duration = previous_end.astimezone(timezone.utc) - previous_start.astimezone(timezone.utc)
     older_start = (previous_start.astimezone(timezone.utc) - duration).astimezone(ZURICH)
@@ -161,7 +161,7 @@ def selected_performance(cache):
         if not current:
             flow = cache.intervals.get(interval_key(start, end), {})
             analyses.update({int(key): restore_analysis(value) for key, value in flow.items()})
-        result = Period(end.isoformat(), {})
+        result = Period(end.strftime("%Y-%m"), {}, period_start=start.isoformat(), period_end=end.isoformat())
         if any(analyses.get(kpi) is None for kpi in range(1, 8)):
             result.issue = "Für den Zeitraum fehlen exakte Bestands-Snapshots oder vergleichbare Zeitmessungen."
         else:
@@ -173,17 +173,24 @@ def selected_performance(cache):
     older = inputs(older_start, previous_start)
     score = score_period(current, previous) if not current.issue and not previous.issue else None
     old_score = score_period(previous, older) if not previous.issue and not older.issue else None
+    return Report([older, previous, current], [item for item in (old_score, score) if item],
+                  (current.issue or previous.issue) if not score else "")
+
+
+def selected_performance(cache):
+    from .service_desk import METRICS
+    period = cache.batch.period
+    report = selected_report(cache)
+    score, old_score = report.current, report.previous_score
     result = comparison(score.value if score else None, old_score.value if old_score else None,
-                        higher_is_better=True, unit="percent", **selected)
-    result.update({"issue": current.issue or previous.issue if not score else "",
+                        higher_is_better=True, unit="percent", **bounds(period))
+    result.update({"issue": report.issue,
                    "areas": score.areas if score else {}, "components": [], "history": []})
     if score:
         for key, (area, label, unit) in METRICS.items():
             result["components"].append({"key": key, "area": area, "label": label, "unit": unit,
-                                         "before": previous.values[key], "after": current.values[key],
+                                         "before": score.previous.values[key], "after": score.current.values[key],
                                          "score": score.components[key]})
-    if old_score:
-        result["history"].append({"start": previous_start.isoformat(), "end": previous_end.isoformat(), "value": old_score.value})
-    if score:
-        result["history"].append({"start": period.start.isoformat(), "end": period.end.isoformat(), "value": score.value})
+    for point in report.scores:
+        result["history"].append({"start": point.current.period_start, "end": point.current.period_end, "value": point.value})
     return result

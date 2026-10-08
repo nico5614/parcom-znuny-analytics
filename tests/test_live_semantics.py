@@ -36,7 +36,7 @@ def test_live_scope_custom_closed_states_waiting_escalation_and_comparison(tmp_p
     cache=LiveCache(tmp_path); cache.update(batch)
     restarted=LiveCache(tmp_path)
     assert restarted.batch.period==period and restarted.reports()[1].comparable
-    assert restarted.management().metrics["Überfällig + gesperrt"]=="1"
+    assert restarted.management().metrics["Überfällig + gesperrt"]=="–"  # Historical endpoint has no observed snapshot.
 
 
 def test_timer_dst_zero_missing_and_customer_mapping():

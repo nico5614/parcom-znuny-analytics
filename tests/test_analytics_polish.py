@@ -116,7 +116,7 @@ def test_exact_end_and_start_snapshot_delta_survive_restart(cache, tmp_path):
     assert overview_comparisons(restored)["Aktuell offen"] == item
 
 
-def test_selected_score_uses_original_weights_and_comparison(tmp_path):
+def test_selected_score_uses_original_weights_and_comparison(tmp_path, qapp):
     cache = LiveCache(tmp_path)
     end = datetime(2026, 10, 5, 12, tzinfo=ZURICH)
     for offset, minutes in ((14, 10), (7, 20), (0, 10)):
@@ -141,6 +141,20 @@ def test_selected_score_uses_original_weights_and_comparison(tmp_path):
     dto = overview(restored, Settings(tmp_path))
     assert dto["score"]["value"] == 100
     assert dto["metrics"][0]["numericValue"] == 100
+    report = restored.performance()
+    assert report.current.value == 100 and report.previous_score.value == 80
+    assert report.current.current.period_end == end.isoformat()
+    from parcom_analytics.pdf_export import export_management_pdf
+    from test_reports import pdf_text
+    path = tmp_path / "selected-score.pdf"
+    export_management_pdf(path, restored.management())
+    text = pdf_text(path)
+    assert "ausgewählterZeitraum" in text and "05.10.2026" in text
+    assert "Score:Exportmonat" not in text
+    # A valid previous score in the same month is never mistaken for a missing current score.
+    restored.batch.frames[5].loc[0, "Erstantwortzeit in Minuten"] = None
+    assert restored.performance().current is None
+    assert restored.selected_performance()["value"] is None
 
 
 def test_score_missing_start_never_reweights_or_falls_back_to_calendar(cache):
@@ -165,3 +179,41 @@ def test_score_zero_is_valid_and_invalid_duration_blocks_score(tmp_path):
     assert cache.selected_performance()["value"] == 100
     cache.batch.frames[5].loc[0, "Erstantwortzeit in Minuten"] = None
     assert cache.selected_performance()["value"] is None
+
+
+def test_open_and_waiting_old_stock_are_distinct(cache):
+    cache.batch.frames[3]["Alter"] = "0 m"
+    cache.batch.frames[7]["Alter"] = "50000 m"
+    comparisons = overview_comparisons(cache)
+    assert comparisons["Offene Tickets >30 Tage"]["value"] == 0
+    assert comparisons["Wartende Tickets >30 Tage"]["value"] == 18
+
+
+def test_selected_endpoint_included_previous_shared_boundary_excluded():
+    from threading import Event
+    from unittest.mock import Mock
+    from parcom_analytics.live_data import fetch_live, attribute_history
+    from parcom_analytics.live_metrics import period_series
+    period = TimeRange.preset("1W", datetime(2026, 10, 5, 12, tzinfo=ZURICH))
+    old_start, _ = period.previous
+    stamps = [period.start, period.end, old_start, period.start - timedelta(seconds=1)]
+    raw = [{"TicketID": str(i), "TicketNumber": str(i), "Title": "Synthetic", "Queue": "PBX",
+            "Created": stamp.isoformat(), "Closed": stamp.isoformat(), "FirstResponse": stamp.isoformat(),
+            "State": "closed successful", "StateType": "closed", "Age": 0,
+            "FirstResponseTimeEscalation": 0, "FirstResponseInMin": 0, "SolutionInMin": 0, "UntilTime": 0}
+           for i, stamp in enumerate(stamps, 1)]
+    ids = [str(i) for i in range(1, 5)]
+    client = Mock()
+    client.search_tickets.side_effect = [ids, ids, [], [], [], ids, ids]
+    client.get_tickets.return_value = raw
+    batch = fetch_live(client, period, Event())
+    assert batch.frames[1]["TicketID"].tolist() == ["1", "2"]
+    assert batch.previous[1]["TicketID"].tolist() == ["3", "4"]
+    assert period_series(batch.frames[1], 1, period).sum() == 2
+    assert client.search_tickets.call_args_list[0].args[0]["TicketCreateTimeOlderDate"] == (period.end.astimezone(timezone.utc) + timedelta(seconds=1)).strftime("%Y-%m-%d %H:%M:%S")
+    client.get_history.return_value = [
+        {"HistoryType": "StateUpdate", "CreateTime": period.end.isoformat(), "CreateBy": "61", "StateType": "closed"},
+        {"HistoryType": "SendAnswer", "CreateTime": period.end.isoformat(), "CreateBy": "61"}]
+    activity, _ = attribute_history(client, {"2": raw[1]}, period, Event())
+    assert len(activity) == 1 and activity[0]["period"] == "current"
+    assert activity[0]["ClosedByID"] == activity[0]["ResponseByID"] == "61"

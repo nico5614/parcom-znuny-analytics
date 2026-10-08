@@ -83,3 +83,23 @@ Validation: 74 focused Python tests passed, including human/SYSTEM attribution,
 global ranking/ties, discovery scope, Unicode abbreviations, override persistence
 and the existing incremental/lazy-history suite. Continue with final cross-contract
 review, full Python suite and performance request-count verification.
+
+## Phase 4 — shared report and endpoint validation
+
+- Live `TimeRange` reports and PDF score output now use the same selected interval
+  score as the DTO. Legacy `DateRange`/Excel month scores keep their original path.
+  Stored endpoint aggregates also replace today's stock in historical reports;
+  missing endpoints remain unavailable in report metrics and charts.
+- Selected flow endpoints are inclusive. The preceding interval excludes its
+  shared end/start boundary so a boundary event is counted only in the selected
+  interval. REST upper search bounds include one extra second, with exact local
+  filtering; chart buckets and history attribution use the same rule.
+- Rankings count unique TicketIDs. Duplicate activity rows cannot inflate closes
+  or first responses. Open and waiting old-stock values have separate DTO names.
+- A supported previous score in the same calendar month cannot masquerade as an
+  unavailable current score. Score history labels and PDFs show actual intervals.
+
+Validation: 141 Python tests passed across new analytics/agent cases, live cache,
+snapshot semantics, shared reports, original score tests and WebView/PDF exports.
+Remaining: final performance/compatibility review, complete Python suite, clean
+branch/remote verification. No React layout or packaging changes were made.
