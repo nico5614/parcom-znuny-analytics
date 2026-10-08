@@ -9,6 +9,14 @@ function fill() {
   fireEvent.click(screen.getByRole('button', { name: 'Anmelden' }))
 }
 describe('Znuny login', () => {
+  it.each(['light', 'dark'] as const)('offers the %s toggle before authentication', theme => {
+    const onTheme = vi.fn()
+    render(<Login theme={theme} onTheme={onTheme} onLogin={vi.fn()} bridgeError="" />)
+    const toggle = screen.getByRole('button', { name: 'Helles oder dunkles Design' })
+    expect(toggle).toHaveAttribute('aria-pressed', String(theme === 'dark'))
+    fireEvent.click(toggle)
+    expect(onTheme).toHaveBeenCalledOnce()
+  })
   it('clears the password while the Python call is still pending', async () => {
     let finish!: (result: Result<Session>) => void
     const login = vi.fn(() => new Promise<Result<Session>>(resolve => { finish = resolve }))

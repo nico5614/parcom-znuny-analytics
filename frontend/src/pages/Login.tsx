@@ -3,7 +3,7 @@ import { Brand } from '../components/Brand'
 import { Icon } from '../components/Icon'
 import type { DesktopApi, Session } from '../types/bridge'
 
-export function Login({ api, version, onLogin, bridgeError }: { api?: DesktopApi; version?: string; onLogin: (session: Session) => void; bridgeError: string }) {
+export function Login({ api, version, onLogin, bridgeError, theme = 'light', onTheme }: { api?: DesktopApi; version?: string; onLogin: (session: Session) => void; bridgeError: string; theme?: 'light' | 'dark'; onTheme?: () => void }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -26,7 +26,7 @@ export function Login({ api, version, onLogin, bridgeError }: { api?: DesktopApi
   }
   return <main className="login-layout">
     <section className="login-main">
-      <Brand />
+      <div className="login-topbar"><Brand /><button className="icon-button" type="button" aria-label="Helles oder dunkles Design" aria-pressed={theme === 'dark'} onClick={onTheme}><Icon name="sun" size={18} /></button></div>
       <div className="login-form-wrap">
         <span className="section-kicker">SERVICE DESK ANALYTICS</span>
         <h1>Willkommen zurück.</h1>

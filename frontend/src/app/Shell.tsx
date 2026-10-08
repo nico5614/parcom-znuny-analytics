@@ -10,18 +10,18 @@ import { Info } from '../pages/Info'
 import { Timeline, selection } from '../components/Timeline'
 import { TicketDialog } from '../components/TicketDialog'
 import { clearResources } from '../hooks/useResource'
+import type { useAppearance } from '../hooks/useAppearance'
 
 const pages: { id: string; label: string; icon: IconName }[] = [{ id: 'overview', label: 'Übersicht', icon: 'overview' }, { id: 'analysis', label: 'Analysen', icon: 'analysis' }, { id: 'agents', label: 'Agenten', icon: 'agents' }, { id: 'export', label: 'Export', icon: 'export' }, { id: 'info', label: 'Info', icon: 'info' }]
 const initial: DataState = { connection: 'offline', busy: false, newData: false, revision: 0, capturedAt: null, hasCache: false, warning: '' }
-export function Shell({ api, session, info, onLogout }: { api: DesktopApi; session: Session; info?: AppInfo; onLogout: () => void }) {
+export function Shell({ api, session, info, onLogout, appearance }: { api: DesktopApi; session: Session; info?: AppInfo; onLogout: () => void; appearance: ReturnType<typeof useAppearance> }) {
   const [page, setPage] = useState('overview')
   const [state, setState] = useState(initial)
   const [period, setPeriod] = useState<Period>()
   const [loadedLabel, setLoadedLabel] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
-  const [reducedMotion, setReducedMotion] = useState(false)
+  const { theme, reducedMotion, changeTheme, changeMotion } = appearance
   const [collapsed, setCollapsed] = useState(() => window.innerWidth <= 1250)
   const [exporting, setExporting] = useState(false)
   const [ticket, setTicket] = useState<string>()
@@ -42,10 +42,9 @@ export function Shell({ api, session, info, onLogout }: { api: DesktopApi; sessi
   }, [api])
   useEffect(() => {
     active.current = true
-    Promise.all([api.getState(), api.getPeriod(), api.getPreferences()]).then(async ([current, cachedPeriod, prefs]) => {
+    Promise.all([api.getState(), api.getPeriod()]).then(async ([current, cachedPeriod]) => {
       if (!active.current) return
       setState(current); setPeriod(cachedPeriod); setLoadedLabel(current.hasCache ? cachedPeriod.label : '')
-      setTheme(prefs.theme); setReducedMotion(prefs.reducedMotion)
       if (current.connection === 'online') {
         const next = await api.resolvePeriod({ preset: '1W' })
         if (active.current && next.ok) { setPeriod(next.data); void refresh(next.data) }
@@ -54,10 +53,7 @@ export function Shell({ api, session, info, onLogout }: { api: DesktopApi; sessi
     const timer = setInterval(() => { void api.checkChanges().then(next => { if (active.current) setState(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next) }).catch(() => { if (active.current) setError('Die Verbindungsprüfung ist fehlgeschlagen.') }) }, 120000)
     return () => { active.current = false; clearInterval(timer) }
   }, [api, refresh])
-  useEffect(() => { document.documentElement.dataset.theme = theme; document.documentElement.dataset.reducedMotion = String(reducedMotion) }, [theme, reducedMotion])
   useEffect(() => { window.scrollTo(0, 0) }, [page])
-  async function changeTheme() { const next = theme === 'dark' ? 'light' : 'dark'; setTheme(next); try { const reply = await api.setPreferences(next, reducedMotion); if (!reply.ok) setError(reply.error.message) } catch { setError('Die Darstellungseinstellung konnte nicht gespeichert werden.') } }
-  async function changeMotion(value: boolean) { setReducedMotion(value); try { const reply = await api.setPreferences(theme, value); if (!reply.ok) setError(reply.error.message) } catch { setError('Die Darstellungseinstellung konnte nicht gespeichert werden.') } }
   async function logout() { clearResources(api); onLogout(); try { await api.logout() } catch { /* Window close also ends the Python session. */ } }
   const statusLabel = state.connection === 'online' ? 'Verbunden' : state.connection === 'cached' ? 'Lokaler Datenstand' : 'Offline'
   return <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : 'sidebar-expanded'}`}>

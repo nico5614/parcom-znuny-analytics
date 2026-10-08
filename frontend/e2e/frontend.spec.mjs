@@ -6,6 +6,18 @@ const fixtures = JSON.parse(readFileSync(new URL('../.validation/fixtures.json',
 const setup = page => setupDesktop(page, fixtures)
 
 const nav = (page, name) => page.getByRole('navigation', { name: 'Hauptnavigation' }).getByRole('button', { name, exact: true })
+test('login contrast and shared theme before and after authentication', async ({ page }) => {
+  await setupDesktop(page, { ...fixtures, initialTheme: 'light' })
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await expect(page.getByRole('heading', { name: 'Willkommen zurück.' })).toHaveCSS('color', 'rgb(32, 42, 55)')
+  await expect(page.getByLabel('Benutzername', { exact: true })).toHaveCSS('color', 'rgb(32, 42, 55)')
+  await page.getByRole('button', { name: 'Helles oder dunkles Design' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await expect(page.getByRole('heading', { name: 'Willkommen zurück.' })).toHaveCSS('color', 'rgb(244, 247, 250)')
+  await page.getByRole('button', { name: 'Lokalen Datenstand öffnen' }).click()
+  await expect(page.getByRole('heading', { name: 'Ticketentwicklung' })).toBeVisible()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+})
 async function offline(page) { await setup(page); await page.getByRole('button', { name: 'Lokalen Datenstand öffnen' }).click(); await expect(page.getByRole('heading', { name: 'Ticketentwicklung' })).toBeVisible() }
 
 test('cached dashboard and complete navigation, ticket, team, export and logout', async ({ page }, info) => {

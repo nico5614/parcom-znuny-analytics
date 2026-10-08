@@ -101,7 +101,7 @@ class DesktopBridge:
 
     def getPreferences(self):
         self._ensure_data()
-        return {"theme": self._settings.get("web_theme", "dark"), "reducedMotion": self._settings.get("reduce_motion", False)}
+        return {"theme": self._settings.get("web_theme", "light"), "reducedMotion": self._settings.get("reduce_motion", False)}
 
     def setPreferences(self, theme, reduced_motion):
         if theme not in ("dark", "light") or type(reduced_motion) is not bool:

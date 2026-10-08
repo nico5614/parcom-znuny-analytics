@@ -4,7 +4,7 @@ export async function setup(page, data) {
     const calls = []
     const state = { connection: 'cached', busy: false, newData: false, revision: 0, capturedAt: data.capturedAt, hasCache: true, warning: '' }
     let period = data.periods['1W']
-    let preferences = { theme: 'dark', reducedMotion: false }
+    let preferences = { theme: data.initialTheme || 'dark', reducedMotion: false }
     window.validation = { calls, failRefresh: false, refreshDelay: 0, exportDelay: 0 }
     const record = (name, args) => calls.push({ name, args })
     const ok = value => ({ ok: true, data: value })
