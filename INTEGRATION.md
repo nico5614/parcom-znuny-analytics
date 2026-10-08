@@ -112,3 +112,16 @@
 - Screenshot-only fixture process anonymizes all identity seeds and uses supplied synthetic history events; no production code changed. No usernames/passwords/customer content in captures. Identity-string scan and README local-link checks passed.
 - Shared the existing browser-test IPC helper with the separate documentation capture. Final repeat: 8 browser checks passed (25.4 s), documentation capture 1 passed (5.3 s). PNGs remain unedited screenshots; no UI mockups or generated artwork.
 - Checkpoint: commit containing this note. Next exact phase: 11, full Python/frontend suites, production frontend build check and final validation documentation. Phase 12 remains gated by real Znuny acceptance, clean-machine/DPI acceptance and release/licensing readiness; do not merge/tag automatically.
+
+## Phase 11 — completed; Phase 12 gated, 8 October 2026 — RESUME HERE
+
+- Phase 10 checkpoint: `5f7cd8d`.
+- Final Python suite: 282 passed in 47.01 s. Frontend: 14 passed across 5 files. TypeScript/Vite production build passed. Latest browser repeat: 8 passed in 25.4 s; separate documentation capture: 1 passed in 5.3 s.
+- Rebuilt frontend assets hash-identical to those in the already validated frozen/installed bundle; no application changes since packaging. Installer metadata, size and SHA256 reconfirmed. No need to rebuild unchanged Python binaries or repeat completed installer phases.
+- Replaced obsolete VALIDATION.md with integrated results, exact artifact paths/hashes, test boundaries, synthetic performance, install/uninstall evidence, README/screenshot status and remaining acceptance gates. SKILL.md re-read; status/diff reviewed.
+- Remote baseline, performance, frontend and Main SHAs rechecked unchanged. Antigravity absent. Main still `f25d853550fba6f86ef8bdc7e4bde3da9118fce8`; no Main merge/tag/release performed.
+- Checkpoint commit: commit containing this entry (`git log -1 --format=%H -- INTEGRATION.md`).
+
+### Next exact action
+
+Automated integration phases 1–11 are complete (Phase 5 explicitly pending live acceptance). Phase 12 cannot proceed until the documented real Znuny and clean-machine/DPI acceptance is supplied/completed. No credentials are available in this run. Do not search for stored credentials or repeat completed phases. Resume with personal interactive acceptance in the application, record real timings, resolve only verified issues and then assess release readiness. Licensing/third-party distribution notices also remain to be settled for public production distribution. Local installer exists and is tested within the documented scope; it has not been published as a GitHub Release.

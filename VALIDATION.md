@@ -1,58 +1,115 @@
-# Prüfstand Version 1.0
+# Prüfstand Version 1.0.0 – Integration
 
-Stand: **7. Oktober 2026** · Branch: `codex/version-1-0`.
+Stand: **8. Oktober 2026** · Branch: **codex/integration**.
 
-**Quellcode-Prüfstand, keine Produktionsfreigabe.** Die persönliche Znuny-Anmeldung und der Abgleich der tatsächlichen Live-Daten fehlen weiterhin. Der aktuelle Quellcode wird nicht als fertig abgenommener Installer ausgegeben.
+**Automatisierter Integrationsstand und lokales Installationspaket geprüft; keine Produktionsfreigabe.** Die echte Znuny-Abnahme, ein frischer Windows-Rechner und der physische DPI-Wechsel bleiben offen. Main, Tag und GitHub Release wurden nicht verändert.
 
-## Abgeschlossene Phasen
+## Integrierte Stände
 
-| Phase | Ergebnis | Gepushter Commit |
-| --- | --- | --- |
-| 1 – Windows-Bundle | Kontrollierter PATH, PyInstaller onedir, isolierter EXE-Starttest vor Inno Setup | `4cfbc57` |
-| 2 – Dashboard und Timeline | Zendesk-inspirierte Übersicht, exakte Zeiträume, eigener Zeitraum und responsive Oberfläche | `71759ee` |
-| 3 – Live-Daten | Zeitraumabgrenzung, aktuelle Eskalationen, Warte-Timer, Typen und Zeitzonen korrigiert | `4097a7f` |
-| 4 – Agenten | Historische Closed-by-Zuordnung, First Responses, Codes, persistente Teamauswahl | `594c62c` |
-| 5 – Aktualisierung und Export | Leichter Änderungstest, expliziter Refresh, Cache, Ladeanzeige, Details und PDF | `c15e82f` |
+| Bestandteil | SHA |
+| --- | --- |
+| Unveränderte Basis codex/version-1-0 | `5e993d0826b389cdccee51e7f6e1d460c5e22838` |
+| Performance integriert | `b393882f97b93e3a464d34abcb7bb90f8b1c3951` |
+| Frontend integriert | `0d8083c673acca37f6949d3d9ba18b7e2847e956` |
+| Installer-Checkpoint | `c141b63` |
+| README-/Screenshot-Checkpoint | `5f7cd8de5a346bc3a34e81f3065bfe9f6f0c70bf` |
+| Main unverändert | `f25d853550fba6f86ef8bdc7e4bde3da9118fce8` |
 
-Phase 6 ist **teilweise geprüft und noch nicht freigegeben**. Die ursprüngliche Packaging-Lösung ist unverändert erhalten.
+Der abschliessende Validierungscommit ist der Commit mit dieser Dokumentänderung (`git log -1 --format=%H -- VALIDATION.md`). Vollständige Phasen- und Fortsetzungsnotizen: [INTEGRATION.md](INTEGRATION.md).
 
-## Aktuelle Prüfungen
+## Automatisierte Ergebnisse
 
-- Vollständige Testsuite: **213 Tests bestanden**, Python 3.14.8 / PySide6 6.11.2. REST-Zugriffe werden simuliert; echte Netzwerkzugriffe sind in pytest gesperrt.
-- Login, vollständiger Hintergrund-Load, alle sieben Analysen, Cache-Neustart, Reconnect, Logout und Fehlerzustände sind mit synthetischen REST-Antworten geprüft.
-- Änderungstest verwendet `TicketLastChangeTimeNewerDate` mit maximal einem Treffer. Er ersetzt keinen Cache. Tests prüfen auch den Hinweis und den Unterschied zwischen rollendem und festem Zeitraum.
-- Agententests prüfen historische Abschlüsse, SYSTEM-Ausschluss, uneindeutige First Responses, unbekannte IDs und persistente Auswahl.
-- Timeline-Tests prüfen Presets, Monatsenden, Intervalle, Grenzen und Rückkehr aus einem eigenen Zeitraum durch Ziehen der Griffe.
-- Native Windows-Ansichten mit synthetischen Daten gestartet: Agenten, Übersicht, Eskalations-Donut und Ladeanzeige. Agenten und Übersicht bei 1050 × 650 ohne horizontalen Seiten-Überlauf geprüft; breite Detailtabellen sind separat scrollbar.
-- Qt-PDF-Export geprüft: Einzelbericht mit 17 Detailspalten über mehrere Spaltengruppen, Management-Bericht mit Quelle, Zeitraum, Datenstand, Kennzahlen, Diagrammen und Vergleichen. Alle sieben Seiten des korrigierten Management-Beispiels visuell geprüft. Management-PDF enthält keine Ticketnummern/Titel.
-- Veraltete Erstantwort-Beschriftung im allgemeinen Eskalationsdiagramm korrigiert. Umbrüche mit nahezu leeren Folgeseiten im Management-Beispiel beseitigt.
-- Regulärer Quellenstart über `pythonw.exe start.py`: Fenster **ParCom Znuny Analytics** läuft und reagiert. Keine persönliche Anmeldung durchgeführt.
-- Ein Gesamttestlauf zeigte eine native Qt-Zugriffsverletzung; die betroffenen Tests bestanden isoliert. Testfenster werden seitdem nach jedem UI-Test im GUI-Thread explizit entfernt. Die beiden anschliessenden vollständigen Läufe bestanden (213 Tests, zuletzt 35,57 Sekunden).
+| Prüfung | Ergebnis |
+| --- | --- |
+| Vollständige Python-Suite | **282 bestanden**, 47,01 s |
+| Frontend / Vitest | **14 bestanden**, 5 Testdateien |
+| TypeScript und Vite-Produktion | Bestanden |
+| Playwright-Navigation und Fehlerzustände | **8 bestanden**, 25,4 s |
+| Separate Dokumentationsaufnahme | **1 bestanden**, 5,3 s |
+| README-Dateilinks / anonyme Screenshot-Identitäten | Bestanden |
+| Frontend-Build gegen eingefrorene Assets | Alle Dateien SHA256-identisch |
 
-Testdaten und visuelle Prüfartefakte liegen ausschliesslich im ignorierten Bereich `.validation`; temporäre Speicher der nativen Sichtprüfung werden automatisch entfernt. Keine echten Kundenexporte wurden für Tests eingecheckt.
+Geprüfte Umgebung: Python 3.14.8, PySide6 6.11.2, pywebview 6.2.1, PyInstaller 6.22.3, pnpm 11.25.0, Inno Setup 7.1.0 und vorhandene Windows-WebView2-Laufzeit. Python-REST-Tests verwenden synthetische Antworten und ersetzen keine Live-Verbindung.
 
-## Packaging und Installer
+Die integrierten Regressionen prüfen insbesondere: transaktionale Cache-Persistenz vor Fortschreiben des Synchronisationszeitpunkts, Delta-Refresh, History-Nachladen erst bei Bedarf, Wiederverwendung von History und fehlende Historie als unbekannt statt Null. Wiederholte Navigation verursacht keine zusätzlichen REST-Ticketabfragen.
 
-Der isolierte Bundle-Check bestand bereits in Phase 1: Windows-GUI-EXE, frischer Anwendungsspeicher, keine Python-Umgebung auf PATH. **Dieser frühere Binärstand enthält nicht die späteren Änderungen der Phasen 2–5.** Daraus wird keine Aussage über einen aktuellen finalen Build abgeleitet.
+Die Browserprüfungen umfassen Anmeldung/Fehlerunterscheidung, Offline-Datenstand, alle Analysen, Timeline/Custom-Zeitraum/Snap, Typfilter, Agenten/Team, Ticketdetails, Export, Info, Logout sowie Navigation bei laufenden Anfragen. Größen: 1920×1080, 1050×650 und simulierte 125 % / 150 %. Diese Prüfungen verwenden kontrollierte IPC-Testdaten.
 
-Die abschliessende EXE-/Installer-Erstellung und der tatsächliche Installer-Smoke-Test sind noch offen. Gemäss Auftrag erfolgt vor dem finalen Packaging die echte Anmeldung und Live-Abnahme. Bestehende ältere Dateien unter `dist/review` oder `dist/release` sind keine freigegebene aktuelle Version. Eine bereits vorhandene Installation unter `C:\Dev\ParCom Znuny Analytics` wurde nicht überschrieben oder deinstalliert.
+## Native Anwendung und PDF
 
-Vorgesehene Ausgaben nach erfolgreicher Abnahme:
+Der integrierte Quellcode und die eingefrorene EXE wurden mit tatsächlichem WebView2 gestartet. Lokale React-Assets und die Bestätigung eines Python-Bridge-Ereignisses durch React wurden geprüft. Alle sieben Analyseadapter und Agentenadapter bestanden.
 
-- `dist/ParCom_Znuny_Analytics/ParCom_Znuny_Analytics.exe` mit `_internal`.
-- `dist/release/ParCom_Znuny_Analytics_Setup_1.0.0.exe`.
-- `dist/release/SHA256SUMS.txt`.
+Im Quellcode-, EXE- und installierten Anwendungstest gelangen jeweils die beiden echten PDF-Flüsse: Management-Übersicht und Reaktionszeitanalyse. Qt-Module und Qt-DLLs waren im WebView-Hauptprozess vor und nach dem Export **nicht geladen**. PDF-Erzeugung erfolgt im separaten Worker. Die EXE-Prüfungen liefen mit Windows-Systempfaden ohne Python/Node auf PATH.
 
-Keine neue finale Prüfsumme wird für einen nicht gebauten Stand angegeben.
+Eine native Anmeldung mit persönlichen Znuny-Zugangsdaten wurde nicht durchgeführt. Die automatisierte WebView-Probe bestätigt Start, Renderer, Bridge und Export, nicht die fachliche Richtigkeit realer Serverdaten.
 
-## Verbleibende Freigabeschritte
+## Aktuelle Artefakte
 
-1. Persönliche Anmeldung direkt in der Anwendung; Live-Load und Zahlen mit Znuny abgleichen, einschliesslich Agentenhistorie, Timeline, Refresh, Ticketlink, PDF und Logout. Im Chat sind keine Zugangsdaten erforderlich.
-2. Danach aktueller Build mit isoliertem Bundle-Check sowie echte Installation und Start der installierten Anwendung; Verknüpfungen, Apps-Eintrag, Deinstallation und Datenerhalt prüfen.
-3. Windows-Test ohne Entwicklungsumgebung. Ein PATH-isolierter Test auf dem Entwicklungsrechner ersetzt keine saubere Windows-Umgebung.
+| Artefakt | Lokaler Pfad |
+| --- | --- |
+| Desktop-EXE | `dist/web/ParCom_Analytics_Web/ParCom Znuny Analytics.exe` |
+| PDF-Worker | `dist/web/ParCom_Analytics_Web/pdf_worker/ParCom_PDF_Worker.exe` |
+| Installer | `dist/release/ParCom_Znuny_Analytics_Setup_1.0.0.exe` |
+| Prüfsummen | `dist/release/SHA256SUMS.txt` |
 
-Kein Code-Signing-Zertifikat vorhanden: Metadaten nennen Nico Köchli, Windows kann trotzdem einen unbekannten Herausgeber anzeigen.
+Die EXE benötigt die angrenzenden Laufzeitordner. Der Installer enthält die gesamte Verteilung. Kein Python/Node für Endbenutzer erforderlich; WebView2 Evergreen muss vorhanden sein. Version 1.0.0, Herausgeber Nico Köchli. Unsigned, keine öffentliche Veröffentlichung.
 
-## Veröffentlichung
+- EXE SHA256: `b6ed67499240ef61233d971cfa5ee1b0b8b7fa17ae138171ccb0f57fc0f61b6a`
+- Installer SHA256: `d6b85d960e7888849bc46774bffaa25a15fd9ee82e137871c8b5fd56854157fa`
+- Installergröße: 100.737.943 Bytes.
 
-`main` bleibt unverändert. Kein Tag `v1.0.0`, kein GitHub-Release, kein Force-Push und keine History-Umschreibung. Die Freigabe bleibt bis zum Abschluss der realen Prüfung offen. Ein Quellcode-Push stellt nicht automatisch einen Installer zum Download bereit.
+Der in Phase 11 neu erzeugte Frontend-Build ist bytegleich mit den Assets in diesem Bundle. Seit dem Paketbau wurden ausschliesslich Dokumentations- und Testhilfen geändert.
+
+## Installer und Uninstaller
+
+`scripts/check_installer.ps1` kompiliert die gleiche Konfiguration und den gleichen Inhalt mit einer separaten AppId. Dadurch bleiben die vorhandene Installation und deren Registrierung unangetastet. Tatsächlich bestanden:
+
+1. Fehlende WebView2-Laufzeit simuliert: Installation stoppt vor Dateikopie und Registrierung, deutscher Hinweis auf Microsoft-Download.
+2. Installation für aktuellen Benutzer in gewählten Testpfad.
+3. Desktop- und Startmenü-Verknüpfungen zeigen auf die richtige EXE; Apps-Eintrag enthält Version und Herausgeber.
+4. Erneute Installation entfernt absichtlich eingesetzte veraltete Runtime-Dateien und die alte EXE; fremde Datei und lokale Anwendungsdaten bleiben erhalten.
+5. Installierte EXE startet, beide PDFs werden erzeugt; kein Qt im Host.
+6. Deinstallation entfernt verwaltete Dateien, Verknüpfungen und Apps-Eintrag.
+7. LocalAppData und nicht verwaltete Datei bleiben erhalten; eigene Testmarkierungen danach entfernt.
+8. Registrierung der bestehenden Benutzerinstallation unverändert.
+
+Der erste Test prüfte vor Abschluss des Inno-Hilfsprozesses. Die Prüfung wartet nun begrenzt auf dessen Bereinigung; der vollständige zweite Durchlauf bestand. Der reale WebView2-Registry-Eintrag wurde nicht verändert. Erkennung folgt der [Microsoft-Dokumentation](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution).
+
+**Grenzen:** Kein Upgrade/Uninstall der vorhandenen produktiven Installation, kein Test auf frischem Windows, keine All-Users-Abnahme und keine tatsächliche Runtime-Neuinstallation. Die isolierte AppId prüft die Installer-Logik ohne Eingriff in die bestehende Benutzerinstallation.
+
+## Performance
+
+Synthetische Messungen des integrierten Performance-Branches, 40 Tickets / 20 ms künstliche Anfragelatenz:
+
+| Szenario | Vorher | Optimiert |
+| --- | ---: | ---: |
+| Erstladung | 1,870 s | 0,469 s |
+| Unveränderter Refresh | 1,853 s | 0,207 s |
+| Vier geänderte Tickets | 1,856 s | 0,230 s |
+
+HTTP-Verbindungswiederverwendung, maximal vier gleichzeitige Anfragen, Deduplizierung, Ticketcache, Delta-Refresh und verzögerte History sind integriert. Diese Werte sind **keine realen Znuny-Messungen**. TicketSearch-/TicketGet-/History-Laufzeiten und tatsächliche Produktionslast sind weiterhin offen. Details: [PERFORMANCE.md](PERFORMANCE.md).
+
+## Dokumentation und Hygiene
+
+Die deutsche README beschreibt den integrierten Stand, enthält zehn verifizierte Stack-Badges und sechs visuell geprüfte Screenshots mit 1600 px Breite (insgesamt ca. 1,05 MB). Aufnahmen zeigen den tatsächlichen React-Produktionsbuild in Edge mit anonymen synthetischen Python-Daten. Keine echten Anmeldedaten, Kundeninhalte oder persönlichen Agentenidentitäten sind abgebildet. Es wurde keine Produktionslogik für die Aufnahmen verändert.
+
+Der obsolete Remote-Branch `antigravity/version-1-0` war exakt gleich der unveränderten Basis und wurde nach Prüfung gelöscht; lokal war er bereits abwesend. Eigene temporäre Testinstallationen, Marker und entbehrliche Testdateien wurden entfernt. Prüfprotokolle bleiben ignoriert erhalten. Kein XLSX/PDF/Cache/Settings-/Environment-Datensatz wurde eingecheckt. Der alte PySide-Fallback bleibt bis zur vollständigen Live-Abnahme erhalten.
+
+## Lokale Prüfnachweise
+
+- `.validation/integration-final-python.log`
+- `.validation/integration-source.json`
+- `.validation/web-bundle-1a5ea5491baf4f68a5a00b93dccf3288.json`
+- `.validation/installer-5e5e5c487fd945f2a5bfdf01d5198493/result.json`
+- `.validation/installer-build.log`
+
+Diese ignorierten Dateien sind lokale Nachweise, keine öffentlich verfügbaren Repository-Dateien.
+
+## Offene Freigabeschritte
+
+1. Persönliche Anmeldung direkt in der Anwendung und fachlicher Vergleich mit Znuny: PBX/PBX Intern, Typen/Unclassified, Status, Kunde 00325, Agentenhistorie, Ticketdetails/Links, Refresh, PDF und Logout. Keine Zugangsdaten im Chat nötig.
+2. Reale REST-Zeitmessung für Erstladung, unveränderten und gegebenenfalls geänderten Refresh.
+3. Frische Windows-Umgebung und tatsächlicher DPI-Wechsel; All-Users-Installation und WebView2-Voraussetzung dort abnehmen.
+4. Lizenzfreigabe und vollständige Drittkomponentenhinweise vor externer Produktionsveröffentlichung klären; derzeit keine eigene LICENSE-Datei. Der Build ist weiterhin nicht signiert.
+
+**Phase 12 bleibt gesperrt:** Kein Main-Merge, kein Tag v1.0.0 und kein GitHub Release. Ein Push auf codex/integration liefert Quellcode und Dokumentation; er veröffentlicht keinen Installer-Download. Nach Vorliegen der fehlenden Abnahme gezielt hier fortsetzen, abgeschlossene Integration nicht wiederholen.
