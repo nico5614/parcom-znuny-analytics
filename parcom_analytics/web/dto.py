@@ -10,7 +10,8 @@ from .. import agents
 from ..analytics import analyze, detail_value, field_label, format_duration, format_value, metric_items
 from ..live_metrics import analyze_live, server_datetime
 from ..periods import PRESETS, TimeRange, ZURICH
-from ..reports import HistoryPoint, comparison_rows, history_metrics, history_value
+from ..reports import HistoryPoint, comparison_label, comparison_rows, history_metrics, history_value
+from ..storage import period_label
 from ..service_desk import HISTORY_MESSAGE, METRICS, score_status
 from .serialization import json_value
 
@@ -70,6 +71,7 @@ def table(frame, analysis=None, page=0, size=50):
             ticket_id = str(row["TicketID"])
         rows.append({"key": ticket_id or f"{number}:{position}", "ticketId": ticket_id,
                      "cells": [detail_value(column, row[column]) for column in columns],
+                     "maximum": bool(analysis and position in analysis.maximum_rows),
                      "tone": analysis.row_highlights[position] if analysis and analysis.row_highlights else ""})
     return {"columns": [{"key": column, "label": field_label(column)} for column in columns],
             "rows": rows, "total": len(frame), "page": page, "pageSize": size}
@@ -98,15 +100,14 @@ def analysis_dto(cache, kpi, ticket_type=None, page=0):
     from ..analytics import KPI_TITLES, KPI_DESCRIPTIONS
     comparisons = table(comparison_rows(report))
     histories = []
-    available = [point for point in report.history if point.analysis is not None]
     for name, (_, unit) in history_metrics(result).items():
         histories.append({"label": name, "values": [history_metrics(point.analysis).get(name, (None, unit))[0] if point.analysis is not None else None for point in report.history], "color": "#4C8DFF" if histories else "#8B6CFF"})
-    labels = [point.record.reporting_month or point.record.export_timestamp[:16].replace("T", " ") for point in report.history]
+    labels = [period_label(point.record) for point in report.history]
     types = cache.batch.frames[kpi]["Typ"].fillna("Typ unbekannt").value_counts().sort_index()
     return json_value({"title": KPI_TITLES[kpi].split(" – ", 1)[-1], "description": KPI_DESCRIPTIONS[kpi],
                        "metrics": [metric(name, value) for name, value in metric_items(result)],
-                       "chart": chart(result), "history": {"title": "Entwicklung", "kind": "line", "labels": labels, "datasets": histories},
-                       "historyNote": report.history_note, "comparison": comparisons,
+                       "chart": chart(result), "history": {"title": "Entwicklung", "kind": "line", "labels": labels, "datasets": histories, "unitLabel": {"minutes": "Minuten", "percent": "%", "count": "Tickets"}[next(iter(history_metrics(result).values()))[1]]},
+                       "historyNote": report.history_note + " " + comparison_label(report), "comparison": comparisons,
                        "types": list(TYPES), "typeChart": {"title": "Tickettypen", "kind": "bar", "labels": types.index.tolist(), "datasets": [{"label": "Tickets", "values": types.values.tolist(), "color": "#32D5FF"}]},
                        "note": result.note, "highlightNote": result.highlight_note,
                        "tableTitle": result.table_title, "table": table(result.details, result, page)})
@@ -132,6 +133,39 @@ def agent_rows(cache, settings, agent_id=None):
         item = registry[row["id"]]
         row["label"] = item["code"] if not item["code"].startswith("ID ") else (item["login"] or item["code"]) + " · Kürzel nicht zugeordnet"
     return sorted(rows, key=lambda row: (-row["Geschlossen"], row["label"]))
+
+
+def agents_dto(cache, settings, agent_id=None, page=0):
+    registry = identities(cache, settings)
+    if agent_id is not None and agent_id not in registry:
+        raise ValueError("Unbekannter Techniker.")
+    chosen = {agent_id} if agent_id else selected_agents(cache, settings)
+    rows = agent_rows(cache, settings, agent_id)
+    batch = cache.batch
+    activity = pd.DataFrame(batch.agents)
+    current = activity.loc[activity["period"].eq("current")] if not activity.empty else activity
+    response = current.loc[current["ResponseByID"].isin(chosen)] if not current.empty else current
+    from ..analytics import numeric_values
+    median = numeric_values(response["response_minutes"]).median() if not response.empty else None
+    cards = [metric(name, sum(row[name] for row in rows), "Aktueller Bestand" if name in ("Aktuell im Besitz", "Davon gesperrt") else "Ausgewählter Zeitraum")
+             for name in ("Aktuell im Besitz", "Davon gesperrt", "Geschlossen", "Erstantworten")]
+    cards.append(metric("Median Reaktionszeit", format_duration(median), "Ereignisbasierte Erstantworten"))
+    owned = batch.frames[3].loc[batch.frames[3]["OwnerID"].map(str).isin(chosen)].copy()
+    events = current.loc[current["ClosedByID"].isin(chosen) | current["ResponseByID"].isin(chosen)].copy() if not current.empty else current
+    combined = pd.concat([owned, events], ignore_index=True).groupby("TicketID", sort=False, dropna=False).first().reset_index()
+    for source, target in (("OwnerID", "Besitzer"), ("ClosedByID", "Geschlossen durch"), ("ResponseByID", "Erste Antwort")):
+        combined[target] = combined[source].map(agents.code) if source in combined else "–"
+    details = combined.reindex(columns=["Ticket#", "Titel", "Typ", "Status", "Besitzer", "Sperre", "Geschlossen durch", "Erste Antwort"])
+    details.attrs["ticket_ids"] = dict(zip(combined["Ticket#"].map(str), combined["TicketID"].map(str)))
+    most = max((row["Geschlossen"] for row in rows), default=0)
+    leaders = " / ".join(row["label"] for row in rows if row["Geschlossen"] == most)
+    system = int(current["ClosedByID"].eq("1").sum()) if not current.empty else 0
+    unknown = int(batch.frames[2]["ClosedByID"].isna().sum())
+    return json_value({"registry": list(sorted(registry.values(), key=lambda item: item["name"])), "selected": sorted(selected_agents(cache, settings)),
+                       "metrics": cards, "rows": rows, "note": f"{len(chosen)} Techniker · SYSTEM-Abschlüsse: {system} · Unbekannte Abschlüsse: {unknown}",
+                       "rankingNote": f"Meiste Abschlüsse im Zeitraum: {leaders} · {most} Tickets" if most else "Keine menschlichen Abschlüsse für die Auswahl vorhanden.",
+                       "chart": {"title": "Geschlossene Tickets nach Techniker", "kind": "bar", "labels": [row["label"] for row in rows], "datasets": [{"label": "Geschlossene Tickets", "values": [row["Geschlossen"] for row in rows], "color": "#32D5FF"}]},
+                       "table": table(details, page=page)})
 
 
 def overview(cache, settings):
@@ -175,7 +209,7 @@ def overview(cache, settings):
 
 
 def ticket_details(cache, ticket_id):
-    for frame in cache.batch.frames.values():
+    for frame in (*cache.batch.frames.values(), *cache.batch.previous.values()):
         match = frame.loc[frame["TicketID"].map(str).eq(ticket_id)]
         if match.empty:
             continue

@@ -40,6 +40,9 @@ def test_analysis_filter_comparison_pagination_and_zero_minutes(web_data):
     assert filtered["table"]["total"] == int(cache.batch.frames[5]["Typ"].eq("Auftrag").sum())
     assert all(row["cells"][3] == "Auftrag" for row in filtered["table"]["rows"])
     assert analysis_dto(cache, 5, page=1)["table"]["rows"] == []
+    assert analysis_dto(cache, 5)["history"]["labels"][0] != analysis_dto(cache, 5)["history"]["labels"][1]
+    assert analysis_dto(cache, 5)["history"]["unitLabel"] == "Minuten"
+    assert any(row["maximum"] for row in response["table"]["rows"])
     for kpi in range(1, 8):
         json.dumps(analysis_dto(cache, kpi), allow_nan=False)
 
@@ -56,6 +59,7 @@ def test_ticket_details_customer_convention_and_safe_deep_link(web_data, monkeyp
     opened.assert_called_once_with("https://znuny.parcom.ch/otrs/index.pl?Action=AgentTicketZoom;TicketID=51")
     assert not bridge.openTicket("1;SessionID=secret")["ok"]
     assert not bridge.openTicket("999999")["ok"]
+    assert bridge.getTicketDetails("200")["ok"]
 
 
 def test_change_check_does_not_replace_cache(web_data):

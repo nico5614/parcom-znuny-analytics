@@ -6,5 +6,5 @@ export default defineConfig({
   base: './',
   plugins: [react(), tailwind()],
   build: { outDir: 'dist', sourcemap: false, target: 'es2022' },
-  test: { environment: 'jsdom', setupFiles: ['./src/test-setup.ts'], clearMocks: true },
+  test: { include: ['src/**/*.test.{ts,tsx}'], environment: 'jsdom', setupFiles: ['./src/test-setup.ts'], clearMocks: true },
 })

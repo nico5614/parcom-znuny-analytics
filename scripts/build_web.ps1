@@ -16,6 +16,20 @@ if (-not $SkipTests) {
 }
 pnpm --dir frontend build
 Assert-Exit 'Frontend build'
-& $python -m PyInstaller --noconfirm --distpath dist/web --workpath build/web packaging/parcom_web.spec
-Assert-Exit 'Desktop bundle'
-& (Join-Path $PSScriptRoot 'check_web_bundle.ps1')
+if (-not $SkipTests) {
+    & $python scripts/web_test_data.py
+    Assert-Exit 'Browser fixtures'
+    pnpm --dir frontend test:e2e
+    Assert-Exit 'Browser validation'
+}
+$originalBuildPath = $env:PATH
+try {
+    # Match the legacy build: never collect another application's Qt/ICU DLLs.
+    $env:PATH = (Join-Path $env:WINDIR 'System32') + ';' + $env:WINDIR + ';' + (Split-Path -Parent $python)
+    & $python -m PyInstaller --noconfirm --clean --distpath dist/web --workpath build/web packaging/parcom_web.spec
+    Assert-Exit 'Desktop bundle'
+    & $python -m PyInstaller --noconfirm --clean --distpath dist/web/ParCom_Analytics_Web --workpath build/web packaging/parcom_pdf_worker.spec
+    Assert-Exit 'PDF worker bundle'
+    & (Join-Path $PSScriptRoot 'check_web_bundle.ps1')
+    & (Join-Path $PSScriptRoot 'check_web_bundle.ps1') -IncludePdf
+} finally { $env:PATH = $originalBuildPath }

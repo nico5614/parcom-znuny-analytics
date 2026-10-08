@@ -12,7 +12,7 @@ from .serialization import json_value
 
 
 class DesktopBridge:
-    def __init__(self, publish=lambda event: None, client=None, root=None, cache=None, settings=None, fetch=None):
+    def __init__(self, publish=lambda event: None, client=None, root=None, cache=None, settings=None, fetch=None, choose_save=None):
         self._publish = publish
         self._lock = Lock()
         self._probe_sequence = 0
@@ -31,6 +31,8 @@ class DesktopBridge:
         self._revision = 0
         self._cancel = Event()
         self._fetch = fetch
+        self._choose_save = choose_save
+        self._export_lock = Lock()
 
     def login(self, username, password):
         from ..znuny import ZnunyClient, LoginError, ConnectionError, ZnunyError
@@ -43,6 +45,8 @@ class DesktopBridge:
                 return {"ok": False, "error": {"kind": "busy", "message": "Die Anwendung wird geschlossen."}}
             if self._client is None:
                 self._client = ZnunyClient()
+            self._username = None
+            self._offline = False
             self._client.login(username.strip(), password)
             with self._state_lock:
                 self._username = username.strip()
@@ -129,11 +133,16 @@ class DesktopBridge:
             return self._error("data", "Der Datenstand konnte nicht ausgewertet werden.")
 
     def getPeriod(self):
-        from ..periods import TimeRange
+        from ..periods import PRESETS, TimeRange
         from .dto import period_dto
         self._ensure_data()
         batch = self._cache.batch
-        return period_dto(batch.period) if batch and isinstance(batch.period, TimeRange) else period_dto(TimeRange.preset(), "1W")
+        if batch and isinstance(batch.period, TimeRange):
+            preset = self._settings.get("web_period_preset", "1W")
+            if preset not in PRESETS or TimeRange.preset(preset, batch.period.end).start != batch.period.start:
+                preset = None
+            return period_dto(batch.period, preset)
+        return period_dto(TimeRange.preset(), "1W")
 
     def resolvePeriod(self, selection):
         from .dto import resolve_period, period_dto
@@ -157,6 +166,60 @@ class DesktopBridge:
         if not isinstance(ticket_id, str) or not re.fullmatch(r"\d+", ticket_id):
             return self._error("validation", "Ungültiges Ticket.")
         return self._read(lambda: ticket_details(self._cache, ticket_id) if self._cache.batch else None)
+
+    def getAgents(self, agent_id=None, page=0):
+        from .dto import agents_dto
+        if type(page) is not int or page < 0 or (agent_id is not None and not isinstance(agent_id, str)):
+            return self._error("validation", "Ungültige Agentenauswahl.")
+        return self._read(lambda: agents_dto(self._cache, self._settings, agent_id, page) if self._cache.batch else None)
+
+    def setTeam(self, selected):
+        from .dto import identities
+        self._ensure_data()
+        if not self._username and not self._offline:
+            return self._error("authentication", "Bitte zuerst anmelden.")
+        with self._state_lock:
+            if not isinstance(selected, list) or any(not isinstance(key, str) or key not in identities(self._cache, self._settings) for key in selected):
+                return self._error("validation", "Ungültige Teamauswahl.")
+            self._settings.set({"team_selection": sorted(set(selected))})
+            self._revision += 1
+        return {"ok": True, "data": self._state()}
+
+    def getExportOptions(self):
+        from ..analytics import KPI_TITLES
+        from .dto import TYPES
+        return [{"id": str(kpi), "label": title.split(" – ", 1)[-1], "types": list(TYPES)} for kpi, title in KPI_TITLES.items()]
+
+    def exportPdf(self, target, ticket_type=None):
+        from copy import deepcopy
+        from pathlib import Path
+        from ..reports import default_report_filename
+        from .dto import filtered_report
+        from .pdf_export import run_export
+        if target not in ("overview", *[str(kpi) for kpi in range(1, 8)]):
+            return self._error("validation", "Ungültige Exportauswahl.")
+        snapshot = self._read(lambda: True if self._cache.batch else None)
+        if not snapshot["ok"] or snapshot["data"] is None:
+            return self._error("empty", "Für den Export zuerst einen Datenstand laden.") if snapshot["ok"] else snapshot
+        if not self._export_lock.acquire(blocking=False):
+            return self._error("busy", "Ein PDF wird bereits erstellt.")
+        try:
+            # Reports stay in Python; only the completion status crosses the bridge.
+            with self._state_lock:
+                report = deepcopy(self._cache.management() if target == "overview" else filtered_report(self._cache, int(target), ticket_type))
+            filename = default_report_filename(report)
+            chosen = self._choose_save(filename) if self._choose_save else None
+            if not chosen:
+                return {"ok": True, "data": {"cancelled": True, "filename": None}}
+            path = Path(chosen)
+            if path.suffix.lower() != ".pdf":
+                path = path.with_suffix(".pdf")
+            run_export(path, report)
+            return {"ok": True, "data": {"cancelled": False, "filename": path.name}}
+        except Exception:
+            return self._error("export", "Das PDF konnte nicht gespeichert werden. Bitte Speicherort und Zugriffsrechte prüfen.")
+        finally:
+            self._export_lock.release()
 
     def openTicket(self, ticket_id):
         result = self.getTicketDetails(ticket_id)
@@ -183,7 +246,7 @@ class DesktopBridge:
                 return self._error("cancelled", "Laden abgebrochen.")
             with self._state_lock:
                 self._cache.update(batch)
-                self._settings.set({"agent_registry": identities(self._cache, self._settings)})
+                self._settings.set({"agent_registry": identities(self._cache, self._settings), "web_period_preset": selection.get("preset")})
                 self._revision += 1
                 self._changes = False
                 self._busy = False

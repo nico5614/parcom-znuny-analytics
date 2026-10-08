@@ -13,10 +13,13 @@ export function useResource<T>(api: DesktopApi, key: string, load: () => Promise
     const cached = cache!.get(cacheKey) as T | undefined
     setResult(previous => ({ key: cacheKey, value: cached !== undefined ? cached : previous.key.endsWith(`:${key}`) ? previous.value : undefined, error: '', loading: cached === undefined }))
     if (cached === undefined) load().then(reply => {
-      if (reply.ok) cache!.set(cacheKey, reply.data)
+      if (reply.ok) {
+        cache!.set(cacheKey, reply.data)
+        while (cache!.size > 64) cache!.delete(cache!.keys().next().value!)
+      }
       if (active) setResult({ key: cacheKey, value: reply.ok ? reply.data : undefined, error: reply.ok ? '' : reply.error.message, loading: false })
     }).catch(() => { if (active) setResult({ key: cacheKey, error: 'Die Desktop-Verbindung wurde unterbrochen.', loading: false }) })
     return () => { active = false }
   }, [api, key, cacheKey, load, cache])
-  return result.key === cacheKey ? result : { key: cacheKey, value: cache.get(cacheKey) as T | undefined, error: '', loading: !cache.has(cacheKey) }
+  return result.key === cacheKey ? result : { key: cacheKey, value: cache.has(cacheKey) ? cache.get(cacheKey) as T : result.key.endsWith(`:${key}`) ? result.value : undefined, error: '', loading: !cache.has(cacheKey) }
 }
