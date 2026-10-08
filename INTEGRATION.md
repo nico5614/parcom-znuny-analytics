@@ -21,3 +21,13 @@
 - Phase 1 checkpoint: `74fdfb5`. Phase 2 checkpoint is the merge commit containing this entry.
 - Next: Phase 3, merge frontend `0d8083c673acca37f6949d3d9ba18b7e2847e956`.
 - Required integration adaptations found by read-only review: bridge refresh must stage/commit transactionally after cache persistence; Agenten must request lazy history and distinguish unavailable history from zero. Preserve Qt-free host and separate PDF worker.
+
+## Phase 3 — completed, 8 October 2026
+
+- Integrated frontend HEAD `0d8083c673acca37f6949d3d9ba18b7e2847e956`; no textual merge conflicts.
+- Bridge now stages optimized refreshes, persists the complete cache, then commits the synchronization watermark under backend locks. Agent history is demand-loaded through the existing optimized loader; repeated navigation uses cache. Offline history not yet loaded is explicitly unavailable, never zero.
+- Four integration regressions verify delta counts, no REST calls on ordinary navigation, disk-failure watermark preservation, lazy/reused history and unavailable offline attribution.
+- Python: 282 passed in 66.72 s. Frontend: 14 passed. TypeScript and Vite production build passed. Browser: 8 passed in 34.0 s (1920, 1050, simulated 125%/150%). Existing PDF worker/startup isolation tests passed.
+- Phase 2 checkpoint: `dc3b867`. Phase 3 checkpoint is the merge commit containing this entry.
+- Next: Phase 4, native integrated source application smoke with real WebView2 and two PDF worker exports. Then document real acceptance as pending if no interactive sign-in, and perform visual acceptance before packaging.
+- No live Znuny login or real timing measurements claimed. No packaging/release/Main changes yet.

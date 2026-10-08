@@ -230,3 +230,6 @@ index.corrupt-*.json
 !packaging/*.spec
 live-cache.json
 settings.ini
+node_modules/
+frontend/coverage/
+*.tsbuildinfo
