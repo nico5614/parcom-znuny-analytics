@@ -19,6 +19,10 @@ export interface DesktopApi {
   getAnalysis(kpi: number, ticketType: string | null, page: number): Promise<Result<Analysis | null>>
   getAgents(agentId: string | null, page: number): Promise<Result<Agents | null>>
   setTeam(selected: string[]): Promise<Result<DataState>>
+  getAgentOverride?(id: string): Promise<Result<{ name?: string; code?: string }>>
+  setAgentDisplayName?(id: string, name: string): Promise<Result<AgentIdentity>>
+  setAgentAbbreviation?(id: string, code: string): Promise<Result<AgentIdentity>>
+  resetAgentOverride?(id: string): Promise<Result<AgentIdentity>>
   getExportOptions(): Promise<{ id: string; label: string; types: string[] }[]>
   exportPdf(target: string, ticketType: string | null): Promise<Result<{ cancelled: boolean; filename: string | null }>>
   getTicketDetails(ticketId: string): Promise<Result<TicketDetails | null>>
@@ -49,7 +53,8 @@ export interface Overview { comparisons?: Record<string, Comparison>; metrics: M
 export interface Analysis { title: string; description: string; metrics: Metric[]; chart: ChartDto; history: ChartDto; historyNote: string; comparison: TableDto; types: string[]; typeChart: ChartDto; note: string; highlightNote: string; tableTitle: string; table: TableDto }
 export interface TicketDetails { id: string; number: string; title: string; fields: { label: string; value: string }[] }
 export interface AgentIdentity { id: string; login: string; name: string; code: string }
-export interface Agents { historyLoaded: boolean; registry: AgentIdentity[]; selected: string[]; metrics: Metric[]; rows: { id: string; label: string; Geschlossen: number | null; Erstantworten: number | null; 'Aktuell im Besitz': number; 'Davon gesperrt': number; 'Reaktionszeit (Min.)': number | null }[]; note: string; rankingNote: string; chart: ChartDto; table: TableDto }
+export interface AgentRow { id: string; label?: string; displayName?: string; abbreviation?: string; rank?: number | null; isPeriodWinner?: boolean; Geschlossen: number | null; Erstantworten: number | null; 'Aktuell im Besitz': number | null; 'Davon gesperrt': number | null; 'Reaktionszeit (Min.)': number | null; medianResponseMinutes?: number | null; meanResponseMinutes?: number | null; responseComparison?: Comparison; meanResponseComparison?: Comparison }
+export interface Agents { historyLoaded: boolean; registry: AgentIdentity[]; selected: string[]; metrics: Metric[]; rows: AgentRow[]; periodWinner?: AgentRow | null; periodWinners?: AgentRow[]; winnerAvailable?: boolean; note: string; rankingNote: string; chart: ChartDto; table: TableDto }
 declare global {
   interface Window { pywebview?: { api: DesktopApi } }
   interface WindowEventMap { 'parcom:desktop': CustomEvent<DesktopEvent> }

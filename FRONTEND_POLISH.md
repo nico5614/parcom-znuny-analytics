@@ -67,3 +67,26 @@ optional refresh, reduced motion and navigation without chart errors.
 Next: backend-supplied agent winners/local overrides, secure saved credentials,
 then installed PDF reproduction/fix and final packaging. PDF remains a release
 blocker until the installed native save-dialog flow is verified.
+
+## Phase 4 — backend winners and local identities
+
+Consumed the agent contract exported from `origin/codex/analytics-polish` without
+merging. `isPeriodWinner` controls crown/fill/name accents; frontend never ranks
+agents to invent winners. The employee card preserves all backend ties, zero
+response minutes, primary median and secondary mean. Detailed ticket navigation
+remains available separately. Team management shows source login/ID and current
+name/code; edit/save/reset call Python persistence methods and reload on close.
+The automatic LRO mapping remains exclusively the backend's responsibility.
+Unsupported integration-backend override APIs disable editing with an explanation.
+
+Validation: 44 frontend tests, build, four winner/editor browser checks plus the
+existing 32 scenarios at 1920×1080, 1050×650 and 125%/150% simulated DPI. Relevant
+Python tests include existing agents and WebView contracts. Fixtures now include
+actual scoped agent discovery and tied winners from the exported backend.
+
+Next: secure Windows credentials and PDF release blocker. Native Windows UI
+automation currently fails before initialization with `helper_unknown_error:
+setup refresh had errors`, including after a kernel reset. Do not describe the
+native save dialog as verified from smoke tests that bypass it. The registry's
+production path `C:\Dev\ParCom Znuny Analytics\` does not exist on this host;
+use the independent validation installer identity instead of replacing user data.

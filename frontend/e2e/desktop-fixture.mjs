@@ -5,6 +5,7 @@ export async function setup(page, data) {
     const state = { connection: 'cached', busy: false, newData: false, revision: 0, capturedAt: data.capturedAt, hasCache: true, warning: '', lastSuccessfulConnection: '2026-10-08T10:23:45+02:00' }
     let period = data.periods['1W']
     let preferences = { theme: data.initialTheme || 'dark', reducedMotion: false }
+    const automaticAgents = structuredClone(data.agents.registry)
     window.validation = { calls, failRefresh: false, refreshDelay: 0, exportDelay: 0 }
     const record = (name, args) => calls.push({ name, args })
     const ok = value => ({ ok: true, data: value })
@@ -24,6 +25,9 @@ export async function setup(page, data) {
       getAnalysis: async (kpi, type, page) => { record('getAnalysis', [kpi, type, page]); return ok(data.analyses[kpi][type || 'all']) },
       getAgents: async (id, page) => { record('getAgents', [id, page]); return ok(data.agents) },
       setTeam: async selected => { record('setTeam', [selected]); data.agents.selected = selected; state.revision++; return ok({ ...state }) },
+      setAgentDisplayName: async (id, name) => { record('setAgentDisplayName', [id, name]); const agent = data.agents.registry.find(agent => agent.id === id); agent.name = name; state.revision++; return ok({ ...agent }) },
+      setAgentAbbreviation: async (id, code) => { record('setAgentAbbreviation', [id, code]); const agent = data.agents.registry.find(agent => agent.id === id); agent.code = code; state.revision++; return ok({ ...agent }) },
+      resetAgentOverride: async id => { record('resetAgentOverride', [id]); const agent = data.agents.registry.find(agent => agent.id === id); Object.assign(agent, automaticAgents.find(agent => agent.id === id)); state.revision++; return ok({ ...agent }) },
       getTicketDetails: async id => { record('getTicketDetails', [id]); return ok(data.tickets[id]) },
       openTicket: async id => { record('openTicket', [id]); return ok(null) },
       getExportOptions: async () => Object.entries(data.analyses).map(([id, kinds]) => ({ id, label: kinds.all.title, types: kinds.all.types })),
