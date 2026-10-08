@@ -103,3 +103,12 @@
 - Tracked-file check found no XLSX/PDF/cache/settings/.env files. Focused credential-pattern scan found no matching hardcoded passwords/session tokens in application, scripts, frontend source or tests. This is a targeted hygiene check, not a claim of a comprehensive security audit.
 - No application code changed; Phase 8's 13 passing focused tests and native installer checks remain current. Git status clean before this note; diff checked.
 - Checkpoint: commit containing this note. Next exact phase: 10, safe screenshots of the integrated UI and final German README. Live acceptance / fresh machine / physical DPI remain open; no Main merge or release.
+
+## Phase 10 — completed, 8 October 2026
+
+- Phase 9 checkpoint: `11bfd44`.
+- Replaced obsolete README with German documentation of the integrated React/WebView/Python application: ten actual-stack badges, architecture diagram, all workflows, transparent score formula, synthetic performance table, source/frozen/installer usage, development/build/tests, storage/security and explicit release limitations.
+- Six real frontend captures in `docs/screenshots/` (1600 px wide, total about 1.05 MB): login, overview hero, escalation analysis/ring chart, agents, ticket details and export. All six visually reviewed. These are Edge renders of the production frontend with controlled Python DTO fixtures, explicitly labelled as such, not a claimed live/native production session.
+- Screenshot-only fixture process anonymizes all identity seeds and uses supplied synthetic history events; no production code changed. No usernames/passwords/customer content in captures. Identity-string scan and README local-link checks passed.
+- Shared the existing browser-test IPC helper with the separate documentation capture. Final repeat: 8 browser checks passed (25.4 s), documentation capture 1 passed (5.3 s). PNGs remain unedited screenshots; no UI mockups or generated artwork.
+- Checkpoint: commit containing this note. Next exact phase: 11, full Python/frontend suites, production frontend build check and final validation documentation. Phase 12 remains gated by real Znuny acceptance, clean-machine/DPI acceptance and release/licensing readiness; do not merge/tag automatically.
