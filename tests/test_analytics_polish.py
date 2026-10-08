@@ -114,3 +114,54 @@ def test_exact_end_and_start_snapshot_delta_survive_restart(cache, tmp_path):
     cache.update(replace(cache.batch, captured_at=(end + timedelta(seconds=10)).isoformat()))
     restored = LiveCache(tmp_path)
     assert overview_comparisons(restored)["Aktuell offen"] == item
+
+
+def test_selected_score_uses_original_weights_and_comparison(tmp_path):
+    cache = LiveCache(tmp_path)
+    end = datetime(2026, 10, 5, 12, tzinfo=ZURICH)
+    for offset, minutes in ((14, 10), (7, 20), (0, 10)):
+        period = TimeRange.preset("1W", end - timedelta(days=offset))
+        batch = validation_batch(period)
+        batch.captured_at = period.end.isoformat()
+        batch.snapshot_is_now = False
+        for kpi, column in ((5, "Erstantwortzeit in Minuten"), (6, "Lösungszeit in Minuten")):
+            batch.frames[kpi][column] = minutes
+            # The current load refreshes the immediately previous flow interval.
+            batch.previous[kpi][column] = 20 if offset == 0 else 10
+        cache.update(batch)
+    score = cache.selected_performance()
+    assert score["value"] == 100 and score["previous"] == 80
+    assert score["delta"] == 20 and score["trend"] == "improvement"
+    assert len(score["areas"]) == 5 and len(score["components"]) == 7
+    assert score["selectedPeriod"]["end"] == end.isoformat()
+    assert score["comparisonPeriod"]["end"] == cache.batch.period.start.isoformat()
+    assert "Monat" not in score["issue"]
+    restored = LiveCache(tmp_path)
+    assert restored.selected_performance() == score
+    dto = overview(restored, Settings(tmp_path))
+    assert dto["score"]["value"] == 100
+    assert dto["metrics"][0]["numericValue"] == 100
+
+
+def test_score_missing_start_never_reweights_or_falls_back_to_calendar(cache):
+    score = cache.selected_performance()
+    assert score["value"] is None and score["previous"] is None
+    assert not score["deltaAvailable"] and score["components"] == []
+    assert "exakte Bestands-Snapshots" in score["issue"]
+
+
+def test_score_zero_is_valid_and_invalid_duration_blocks_score(tmp_path):
+    cache = LiveCache(tmp_path)
+    end = datetime(2026, 10, 5, 12, tzinfo=ZURICH)
+    for offset in (7, 0):
+        period = TimeRange.preset("1W", end - timedelta(days=offset))
+        batch = validation_batch(period)
+        batch.captured_at = period.end.isoformat()
+        batch.snapshot_is_now = False
+        for kpi, column in ((5, "Erstantwortzeit in Minuten"), (6, "Lösungszeit in Minuten")):
+            batch.frames[kpi][column] = 0
+            batch.previous[kpi][column] = 0
+        cache.update(batch)
+    assert cache.selected_performance()["value"] == 100
+    cache.batch.frames[5].loc[0, "Erstantwortzeit in Minuten"] = None
+    assert cache.selected_performance()["value"] is None

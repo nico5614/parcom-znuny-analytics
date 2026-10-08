@@ -80,6 +80,7 @@ class LiveCache:
         self.history = {}
         self.periods = {}
         self.observations = {}
+        self.intervals = {}
         self.warning = ""
         self._reports = None
         if self.path.exists():
@@ -98,10 +99,12 @@ class LiveCache:
                 self.batch.snapshot_is_now = current.get("snapshot_is_now")
                 self.history, self.periods = payload["history"], payload["periods"]
                 self.observations = payload.get("observations", {})
+                self.intervals = payload.get("intervals", {})
                 self.reports()
             except (ValueError, KeyError, TypeError, OSError):
                 self.batch, self.history, self.periods = None, {}, {}
                 self.observations = {}
+                self.intervals = {}
                 self.warning = "Der letzte Znuny-Datenstand konnte nicht gelesen werden. Excel-Daten bleiben verfügbar."
                 LOGGER.warning("Live cache could not be read")
 
@@ -110,7 +113,14 @@ class LiveCache:
         analyses = {kpi: analyze(kpi, frame) for kpi, frame in batch.frames.items()}
         history, periods = dict(self.history), dict(self.periods)
         observations = dict(self.observations)
+        intervals = dict(self.intervals)
         if isinstance(batch.period, TimeRange):
+            from .comparisons import interval_key
+            intervals[interval_key(batch.period.start, batch.period.end)] = {
+                str(kpi): aggregate(analyses[kpi]) for kpi in (1, 2, 5, 6)}
+            if {1, 2, 5, 6}.issubset(batch.previous):
+                intervals[interval_key(*batch.period.previous)] = {
+                    str(kpi): aggregate(analyze(kpi, batch.previous[kpi])) for kpi in (1, 2, 5, 6)}
             operations = operational_metrics(batch)
             operations["Aktuell gesperrt"] = int(batch.frames[3]["Sperre"].eq("Gesperrt").sum())
             observations[batch.captured_at] = {"operational": operations}
@@ -151,10 +161,12 @@ class LiveCache:
                                           "agents": batch.agents, "note": batch.note, "identities":batch.identities,
                                           "load_started_at":batch.load_started_at, "history_loaded":batch.history_loaded,
                                           "snapshot_is_now":batch.snapshot_is_now},
-                              "history": history, "periods": periods, "observations": observations})
+                              "history": history, "periods": periods, "observations": observations,
+                              "intervals": intervals})
         candidate = copy(self)
         candidate.batch, candidate.history, candidate.periods = batch, history, periods
         candidate.observations = observations
+        candidate.intervals = intervals
         candidate._reports = None
         reports = candidate.reports()
         temporary = self.path.with_suffix(".json.tmp")
@@ -171,6 +183,7 @@ class LiveCache:
             temporary.unlink(missing_ok=True)
         self.batch, self.history, self.periods = batch, history, periods
         self.observations = observations
+        self.intervals = intervals
         self._reports = reports
 
     def reports(self):
@@ -214,6 +227,10 @@ class LiveCache:
                    for _, item in sorted(self.periods.items())]
         return compare_periods(periods)
 
+    def selected_performance(self):
+        from .comparisons import selected_performance
+        return selected_performance(self)
+
     def management(self):
         reports = self.reports()
         if len(reports) != 7:
@@ -227,4 +244,5 @@ class LiveCache:
         self.path.unlink(missing_ok=True)
         self.batch, self.history, self.periods = None, {}, {}
         self.observations = {}
+        self.intervals = {}
         self._reports = None

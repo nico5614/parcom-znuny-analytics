@@ -12,7 +12,7 @@ from ..live_metrics import analyze_live, server_datetime
 from ..periods import PRESETS, TimeRange, ZURICH
 from ..reports import HistoryPoint, comparison_label, comparison_rows, history_metrics, history_value
 from ..storage import period_label
-from ..service_desk import HISTORY_MESSAGE, METRICS, score_status
+from ..service_desk import score_status
 from ..comparisons import bounds, kpi_comparisons, overview_comparisons, snapshot_context, snapshot_analysis
 from .serialization import json_value
 
@@ -234,11 +234,8 @@ def agents_dto(cache, settings, agent_id=None, page=0):
 
 def overview(cache, settings):
     management = cache.management()
-    metrics, performance = management.metrics, management.performance
-    score = performance.current
-    score_text = f"{format_value(score.value)} %" if score else "–"
-    issue = performance.issue or HISTORY_MESSAGE if not score else "100 % = keine Verschlechterung; keine SLA-Bewertung."
-    top = [metric("Performance Score", score_text, "Trendindex · monatlicher Vergleich"),
+    metrics = management.metrics
+    top = [metric("Performance Score", "–", "Ausgewählter Zeitraum"),
            metric("Neue Tickets", metrics["Neue Tickets"], "Ausgewählter Zeitraum"),
            metric("Geschlossene Tickets", metrics["Geschlossene Tickets"], "Ausgewählter Zeitraum"),
            metric("Abschlussquote", metrics["Abschlussverhältnis (geschlossen / neu)"], "Geschlossen / neu"),
@@ -266,18 +263,26 @@ def overview(cache, settings):
     action = details.loc[details["Timer"].eq("Überfällig")].copy()
     action.attrs = details.attrs.copy()
     action = action[[column for column in ("Ticket#", "Titel", "Besitzer", "Timer", "Sperre") if column in action]]
-    breakdown = []
-    if score:
-        for key, (_, name, unit) in METRICS.items():
-            breakdown.append({"label": name, "before": history_value(score.previous.values[key] * (100 if unit == "share" else 1), "percent" if unit == "share" else unit),
-                              "after": history_value(score.current.values[key] * (100 if unit == "share" else 1), "percent" if unit == "share" else unit),
-                              "score": f"{format_value(score.components[key])} %"})
+    selected_score = cache.selected_performance()
+    top[0] = compared_metric("Performance Score", "–", selected_score, "percent")
+    top[0]["note"] = "Ausgewählter Zeitraum · unveränderte Score-Formel"
+    breakdown = [{"label": item["label"],
+                  "before": history_value(item["before"] * (100 if item["unit"] == "share" else 1), "percent" if item["unit"] == "share" else item["unit"]),
+                  "after": history_value(item["after"] * (100 if item["unit"] == "share" else 1), "percent" if item["unit"] == "share" else item["unit"]),
+                  "score": f'{format_value(item["score"])} %'} for item in selected_score["components"]]
+    is_current = snapshot_context(cache.batch)["snapshotIsNow"]
+    if not is_current:
+        agent_chart["labels"] = []
+        agent_chart["datasets"][0]["values"] = []
+        action = action.iloc[:0]
     return json_value({"metrics": top, "operational": operational, "services": services,
                        "comparisons": semantic, **bounds(cache.batch.period), "volume": volume,
                        "agentChart": agent_chart, "action": table(action, page=0, size=5),
-                       "waitingNote": " · ".join(f"{name}: {metrics.get(name, '–')}" for name in ("Aktive Timer", "Ohne Timer", "Timer unbekannt", "Automatisches Schliessen vorgemerkt")),
-                       "score": {"issue": issue, "status": score_status(score.value)[0] if score else "Vergleich fehlt", "areas": [{"label": name, "value": value} for name, value in score.areas.items()] if score else [], "breakdown": breakdown,
-                                 "history": {"title": "Performance im Verlauf", "kind": "line", "labels": [point.current.month for point in performance.scores], "datasets": [{"label": "Trendindex", "values": [point.value for point in performance.scores], "color": "#8B6CFF"}]}}})
+                       "waitingNote": " · ".join(f"{name}: {metrics.get(name, '–')}" for name in ("Aktive Timer", "Ohne Timer", "Timer unbekannt", "Automatisches Schliessen vorgemerkt")) if is_current else "Historische operative Ticketdetails sind nicht verfügbar.",
+                       "score": {**selected_score, "issue": selected_score["issue"] or "100 % = keine Verschlechterung; keine SLA-Bewertung.",
+                                 "status": score_status(selected_score["value"])[0] if selected_score["value"] is not None else "Vergleich fehlt",
+                                 "areas": [{"label": name, "value": value} for name, value in selected_score["areas"].items()], "breakdown": breakdown,
+                                 "history": {"title": "Performance im Verlauf", "kind": "line", "labels": [point["end"] for point in selected_score["history"]], "datasets": [{"label": "Trendindex", "values": [point["value"] for point in selected_score["history"]], "color": "#8B6CFF"}]}}})
 
 
 def ticket_details(cache, ticket_id):

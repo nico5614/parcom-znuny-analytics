@@ -30,3 +30,27 @@ Branch: `codex/analytics-polish`, based exactly on integration
 Validation: 55 focused Python tests passed (comparisons plus existing WebView,
 agent/export, live semantics and cache contracts). Phase 2 continues with selected
 interval score behavior; phase 3 adds agent discovery, winner and persistent overrides.
+
+## Phase 2 — selected interval score
+
+`LiveCache.selected_performance()` supplies the WebView's selected interval score.
+The existing formula (`service_desk.score_period`) is called unchanged: each raw
+component is 100 when current <= previous, otherwise `100 * previous / current`.
+The seven components form five equally weighted areas (Backlog, Escalations,
+Response, Solution, Waiting); the two-component areas average their components.
+The final five-area average is rounded to one decimal. New/closed ticket counts
+remain context without score weight. This is a relative trend index, not an SLA
+or absolute quality rating.
+
+Current service durations use selected flow data; previous durations use the
+immediately preceding equal interval. Stock components use end/start observations.
+A score is unavailable if any required input is missing/invalid; components are
+never dropped or reweighted. A previous score additionally requires the preceding
+interval's flow aggregates and its earlier endpoint snapshot. The DTO includes
+selected/comparison bounds, current/previous score, signed delta, trend, components
+and areas. Aggregate interval inputs persist transactionally without ticket details.
+Legacy monthly Excel scoring and its export report remain compatible.
+
+Validation: 76 focused Python tests passed, including unchanged score weighting,
+current/previous interval scores, restart persistence, zeros and invalid values.
+Continue with human-agent discovery, ranking, abbreviations and local overrides.
