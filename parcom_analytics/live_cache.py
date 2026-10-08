@@ -79,6 +79,7 @@ class LiveCache:
         self.batch = None
         self.history = {}
         self.periods = {}
+        self.observations = {}
         self.warning = ""
         self._reports = None
         if self.path.exists():
@@ -94,10 +95,13 @@ class LiveCache:
                 previous = {int(kpi): pd.DataFrame(rows, columns=NORMALIZED_COLUMNS, dtype=object) for kpi,rows in current.get("previous", {}).items()}
                 self.batch = LiveBatch(period, current["captured_at"], frames, previous, current.get("agents", []), current.get("note", ""), current.get("identities", []), current.get("load_started_at", ""))
                 self.batch.history_loaded = current.get("history_loaded", True)
+                self.batch.snapshot_is_now = current.get("snapshot_is_now")
                 self.history, self.periods = payload["history"], payload["periods"]
+                self.observations = payload.get("observations", {})
                 self.reports()
             except (ValueError, KeyError, TypeError, OSError):
                 self.batch, self.history, self.periods = None, {}, {}
+                self.observations = {}
                 self.warning = "Der letzte Znuny-Datenstand konnte nicht gelesen werden. Excel-Daten bleiben verfügbar."
                 LOGGER.warning("Live cache could not be read")
 
@@ -105,6 +109,11 @@ class LiveCache:
         # Fully prepare and validate before replacing the previous offline fallback.
         analyses = {kpi: analyze(kpi, frame) for kpi, frame in batch.frames.items()}
         history, periods = dict(self.history), dict(self.periods)
+        observations = dict(self.observations)
+        if isinstance(batch.period, TimeRange):
+            operations = operational_metrics(batch)
+            operations["Aktuell gesperrt"] = int(batch.frames[3]["Sperre"].eq("Gesperrt").sum())
+            observations[batch.captured_at] = {"operational": operations}
         for kpi in (3, 4, 7):
             key = f"{kpi}:{batch.captured_at}"
             record = LiveRecord(kpi, batch.captured_at, TIMEZONE, None, key)
@@ -140,10 +149,12 @@ class LiveCache:
                                           "captured_at": batch.captured_at, "frames": safe_frames,
                                           "previous": {kpi: frame.reindex(columns=NORMALIZED_COLUMNS).astype(object).where(pd.notna(frame), None).to_dict("records") for kpi, frame in batch.previous.items()},
                                           "agents": batch.agents, "note": batch.note, "identities":batch.identities,
-                                          "load_started_at":batch.load_started_at, "history_loaded":batch.history_loaded},
-                              "history": history, "periods": periods})
+                                          "load_started_at":batch.load_started_at, "history_loaded":batch.history_loaded,
+                                          "snapshot_is_now":batch.snapshot_is_now},
+                              "history": history, "periods": periods, "observations": observations})
         candidate = copy(self)
         candidate.batch, candidate.history, candidate.periods = batch, history, periods
+        candidate.observations = observations
         candidate._reports = None
         reports = candidate.reports()
         temporary = self.path.with_suffix(".json.tmp")
@@ -159,6 +170,7 @@ class LiveCache:
         finally:
             temporary.unlink(missing_ok=True)
         self.batch, self.history, self.periods = batch, history, periods
+        self.observations = observations
         self._reports = reports
 
     def reports(self):
@@ -214,4 +226,5 @@ class LiveCache:
     def clear(self):
         self.path.unlink(missing_ok=True)
         self.batch, self.history, self.periods = None, {}, {}
+        self.observations = {}
         self._reports = None

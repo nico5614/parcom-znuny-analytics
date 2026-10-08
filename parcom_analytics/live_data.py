@@ -75,6 +75,7 @@ class LiveBatch:
     history_loaded: bool = True
     # Memory-only staging. Never serialize raw REST responses or history.
     _state: object = field(default=None, repr=False, compare=False)
+    snapshot_is_now: bool | None = None
 
 
 @dataclass
@@ -273,6 +274,7 @@ def fetch_period(client, period, cancel, progress):
                      {1:new, 2:closed, 3:opened, 4:opened.copy(), 5:closed.copy(), 6:closed.copy(), 7:waiting},
                      {1:old_new, 2:old_closed, 5:old_closed.copy(), 6:old_closed.copy()},
                      load_started_at=started_at, history_loaded=False,
+                     snapshot_is_now=abs((datetime.fromisoformat(started_at).astimezone(timezone.utc) - period.end.astimezone(timezone.utc)).total_seconds()) <= 2,
                      _state=TicketState(raw_tickets, selections, started_at,
                                         generation, period))
 

@@ -13,6 +13,7 @@ from ..periods import PRESETS, TimeRange, ZURICH
 from ..reports import HistoryPoint, comparison_label, comparison_rows, history_metrics, history_value
 from ..storage import period_label
 from ..service_desk import HISTORY_MESSAGE, METRICS, score_status
+from ..comparisons import bounds, kpi_comparisons, overview_comparisons, snapshot_context, snapshot_analysis
 from .serialization import json_value
 
 TYPES = ("Unclassified", "Störung", "Auftrag", "Reparatur", "Abklärung", "Wartung", "Projekt", "Spam", "Bestellung")
@@ -42,6 +43,22 @@ def resolve_period(selection):
 
 def metric(name, value, note="", tone="default"):
     return {"label": name, "value": str(value), "note": note, "tone": tone}
+
+
+def compared_metric(name, display, data, unit="count", **kwargs):
+    """Keep the accepted frontend's formatted value and add numeric semantics."""
+    item = metric(name, display, data["contextLabel"], **kwargs)
+    item.update({key: value for key, value in data.items() if key != "value"})
+    item["numericValue"] = data["value"]
+    if data["value"] is None:
+        item["value"] = "–"
+    elif unit == "minutes":
+        item["value"] = format_duration(data["value"])
+    elif unit == "percent":
+        item["value"] = f'{format_value(data["value"])} %'
+    else:
+        item["value"] = format_value(int(data["value"]))
+    return item
 
 
 def chart(analysis):
@@ -104,8 +121,48 @@ def analysis_dto(cache, kpi, ticket_type=None, page=0):
         histories.append({"label": name, "values": [history_metrics(point.analysis).get(name, (None, unit))[0] if point.analysis is not None else None for point in report.history], "color": "#4C8DFF" if histories else "#8B6CFF"})
     labels = [period_label(point.record) for point in report.history]
     types = cache.batch.frames[kpi]["Typ"].fillna("Typ unbekannt").value_counts().sort_index()
+    semantic = kpi_comparisons(cache, kpi, ticket_type)
+    cards = [metric(name, value) for name, value in metric_items(result)]
+    if kpi in {1, 2}:
+        key = "Neue Tickets" if kpi == 1 else "Geschlossene Tickets"
+        cards[0] = compared_metric(cards[0]["label"], cards[0]["value"], semantic[key])
+    elif kpi in {5, 6}:
+        for index, item in enumerate(cards):
+            stat = "median" if item["label"] == "Median" else "mean" if item["label"] == "Durchschnitt" else None
+            if stat:
+                cards[index] = compared_metric(item["label"], item["value"], semantic[stat], "minutes")
+                cards[index]["primary"] = stat == "median"
+    else:
+        context = snapshot_context(cache.batch)
+        for item in cards:
+            item.update(context)
+            item["note"] = context["contextLabel"]
+        keys = list(semantic)
+        cards[0] = compared_metric(cards[0]["label"], cards[0]["value"], semantic[keys[0]])
+        if kpi == 4:
+            cards[1] = compared_metric(cards[1]["label"], cards[1]["value"], semantic["Aktuell eskaliert"])
+            cards[-1] = compared_metric(cards[-1]["label"], cards[-1]["value"], semantic["Eskalationsquote"], "percent")
+        if not context["snapshotIsNow"]:
+            historical = snapshot_analysis(cache, kpi, cache.batch.period.end) if ticket_type is None else None
+            # Stored snapshots contain aggregates, not historic ticket details/types.
+            result = historical or replace(result, chart=pd.Series(dtype=float), details=result.details.iloc[:0],
+                                            note="Kein exakter Snapshot für diesen Endzeitpunkt verfügbar.")
+            if historical:
+                cards = [metric(name, value, context["contextLabel"]) for name, value in metric_items(historical)]
+                cards[0] = compared_metric(cards[0]["label"], cards[0]["value"], semantic[keys[0]])
+            else:
+                for item in cards:
+                    item["value"] = "–"
+            types = pd.Series(dtype=int)
+    comparison_data = pd.DataFrame([
+        [name, history_value(item["previous"], item.get("unit", "percent" if name == "Eskalationsquote" else "count")) if item["previous"] is not None else "–",
+         history_value(item["value"], item.get("unit", "percent" if name == "Eskalationsquote" else "count")) if item["value"] is not None else "–",
+         item["delta"] if item["deltaAvailable"] else "Kein Vergleich verfügbar"]
+        for name, item in semantic.items()], columns=["Kennzahl", "Vorher", "Ausgewählt", "Veränderung"])
+    comparisons = table(comparison_data)
     return json_value({"title": KPI_TITLES[kpi].split(" – ", 1)[-1], "description": KPI_DESCRIPTIONS[kpi],
-                       "metrics": [metric(name, value) for name, value in metric_items(result)],
+                       "metrics": cards, "primaryStatistic": "median" if kpi in {5, 6} else None,
+                       "comparisons": semantic, **bounds(cache.batch.period),
                        "chart": chart(result), "history": {"title": "Entwicklung", "kind": "line", "labels": labels, "datasets": histories, "unitLabel": {"minutes": "Minuten", "percent": "%", "count": "Tickets"}[next(iter(history_metrics(result).values()))[1]]},
                        "historyNote": report.history_note + " " + comparison_label(report), "comparison": comparisons,
                        "types": list(TYPES), "typeChart": {"title": "Tickettypen", "kind": "bar", "labels": types.index.tolist(), "datasets": [{"label": "Tickets", "values": types.values.tolist(), "color": "#32D5FF"}]},
@@ -189,6 +246,13 @@ def overview(cache, settings):
     operational_names = ("Wartende Tickets", "Überfällige Warte-Tickets", "Überfällig + gesperrt", "Offene Tickets >30 Tage")
     operational = [metric(name, metrics.get(name, "–"), "Aktueller Bestand", "danger" if name in operational_names[1:3] and metrics.get(name, "0") != "0" else "default") for name in operational_names]
     services = [metric(name, metrics[name], "Ausgewählter Zeitraum" if "Median" in name else "Aktueller Bestand") for name in ("Median Reaktionszeit", "Median Lösungszeit", "Eskalationsquote")]
+    semantic = overview_comparisons(cache)
+    for cards in (top, operational, services):
+        for index, item in enumerate(cards):
+            name = item["label"]
+            if name in semantic:
+                unit = "minutes" if "Reaktionszeit" in name or "Lösungszeit" in name else "percent" if "quote" in name.lower() else "count"
+                cards[index] = compared_metric(name, item["value"], semantic[name], unit, tone=item["tone"])
     new, closed = (management.kpis[kpi].analysis.chart for kpi in (1, 2))
     labels = list(dict.fromkeys([*new.index, *closed.index]))
     volume = {"title": "Ticketentwicklung", "kind": "line", "labels": labels,
@@ -208,7 +272,8 @@ def overview(cache, settings):
             breakdown.append({"label": name, "before": history_value(score.previous.values[key] * (100 if unit == "share" else 1), "percent" if unit == "share" else unit),
                               "after": history_value(score.current.values[key] * (100 if unit == "share" else 1), "percent" if unit == "share" else unit),
                               "score": f"{format_value(score.components[key])} %"})
-    return json_value({"metrics": top, "operational": operational, "services": services, "volume": volume,
+    return json_value({"metrics": top, "operational": operational, "services": services,
+                       "comparisons": semantic, **bounds(cache.batch.period), "volume": volume,
                        "agentChart": agent_chart, "action": table(action, page=0, size=5),
                        "waitingNote": " · ".join(f"{name}: {metrics.get(name, '–')}" for name in ("Aktive Timer", "Ohne Timer", "Timer unbekannt", "Automatisches Schliessen vorgemerkt")),
                        "score": {"issue": issue, "status": score_status(score.value)[0] if score else "Vergleich fehlt", "areas": [{"label": name, "value": value} for name, value in score.areas.items()] if score else [], "breakdown": breakdown,
