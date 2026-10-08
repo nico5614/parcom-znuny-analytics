@@ -26,6 +26,8 @@ $originalBuildPath = $env:PATH
 try {
     # Match the legacy build: never collect another application's Qt/ICU DLLs.
     $env:PATH = (Join-Path $env:WINDIR 'System32') + ';' + $env:WINDIR + ';' + (Split-Path -Parent $python)
+    & $python scripts/prepare_build.py --executable-name 'ParCom Znuny Analytics.exe'
+    Assert-Exit 'Windows resources'
     & $python -m PyInstaller --noconfirm --clean --distpath dist/web --workpath build/web packaging/parcom_web.spec
     Assert-Exit 'Desktop bundle'
     & $python -m PyInstaller --noconfirm --clean --distpath dist/web/ParCom_Analytics_Web --workpath build/web packaging/parcom_pdf_worker.spec

@@ -1,6 +1,7 @@
 """Generate Windows resources from the shared version and existing logo."""
 
 from pathlib import Path
+import argparse
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -18,12 +19,15 @@ from parcom_analytics import APP_NAME, DISPLAY_VERSION, PUBLISHER, VERSION, WIND
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--executable-name", default="ParCom_Znuny_Analytics.exe")
+    executable_name = parser.parse_args().executable_name
     output = ROOT / "build"
     output.mkdir(exist_ok=True)
     parts = tuple(int(value) for value in WINDOWS_VERSION.split("."))
     strings = {"CompanyName": PUBLISHER, "FileDescription": APP_NAME, "FileVersion": WINDOWS_VERSION,
                "InternalName": "ParCom_Znuny_Analytics", "LegalCopyright": f"© {PUBLISHER}",
-               "OriginalFilename": "ParCom_Znuny_Analytics.exe", "ProductName": APP_NAME,
+               "OriginalFilename": executable_name, "ProductName": APP_NAME,
                "ProductVersion": VERSION}
     info = VSVersionInfo(ffi=FixedFileInfo(filevers=parts, prodvers=parts, mask=0x3f, flags=0,
                                          OS=0x40004, fileType=1, subtype=0, date=(0, 0)),

@@ -54,3 +54,32 @@
 - All 8 browser checks passed at 1920x1080, 1050x650 and simulated 125%/150% scaling, including loading navigation and reduced motion. Native WebView2 startup/bridge was independently verified in Phase 4.
 - No visual code changes required. A physical monitor DPI transition and fresh Windows installation remain unverified, not represented by browser scaling.
 - Phase 5 checkpoint: `c9c2673`. Next: Phase 7, production frontend/frozen bundle; preserve PDF worker isolation and sanitize PATH. Use the final requested EXE name and verify before starting installer work.
+
+## Phase 7 — completed, 8 October 2026 — RESUME HERE
+
+- Phase 6 checkpoint: `e577299`.
+- Production frontend built; PyInstaller onedir host and independent PDF worker built successfully with sanitized PATH. Final executable name and version resources added without changing backend/UI behavior.
+- Focused packaging/bridge regression tests: 8 passed in 2.31 s. Latest complete suite remains 282 Python / 14 frontend / 8 browser checks, all green (Phase 3).
+- Both actual frozen checks passed on this Windows host without Python/Node on PATH: local React assets, rendered bridge acknowledgement, synthetic report adapters and both real PDF exports. Qt modules/DLLs in host empty before and after exports.
+- Reports (ignored): `.validation/web-bundle-a52656d38de94a66a7b98eb2be7efaa7.json` and `.validation/web-bundle-7b9bc0dbab574d08a44a1287b307db32.json`. Build log: `.validation/integration-build.log`.
+- EXE: `dist/web/ParCom_Analytics_Web/ParCom Znuny Analytics.exe`. Requires adjacent `_internal` and `pdf_worker` directories; not a standalone single-file distribution.
+- Metadata verified: ParCom Znuny Analytics, product 1.0.0, file 1.0.0.0, publisher Nico Köchli, correct OriginalFilename. Unsigned.
+- EXE SHA256: `b6ed67499240ef61233d971cfa5ee1b0b8b7fa17ae138171ccb0f57fc0f61b6a`.
+- Checkpoint commit: commit containing this entry (`git log -1 --format=%H -- INTEGRATION.md`).
+
+### Next exact phase: Phase 8 — installer and uninstaller
+
+1. Read SKILL.md, status/log and this note; check quota. Do not redo phases 1–7 or merge the specialists again.
+2. Adapt Inno Setup/build orchestration to the integrated distribution and final EXE name. Current `installer/parcom_znuny_analytics.iss` and `scripts/build_windows.ps1` still target the old PySide distribution. Keep the sanitized WebView build/checks and PDF worker isolation.
+3. Verify WebView2 runtime detection/behavior, version/publisher, selectable path, shortcuts, Apps entry and upgrade behavior.
+4. Only after frozen checks (already passed), build installer, install, launch/export, uninstall and verify application cleanup plus LocalAppData retention. Inspect existing installation/registry before changing anything: an existing installation was previously observed at `C:\Dev\ParCom Znuny Analytics`; do not delete user data.
+5. Checkpoint/push Phase 8 before cleanup (9), final README/screenshots (10), final validation (11) and gated Main/release (12).
+
+### Open gates / preserved state
+
+- Phase 5 real Znuny acceptance/timing remains pending personal interactive login. No live measurements fabricated. Does not block packaging, but blocks final Main/tag/release acceptance.
+- Physical DPI transition and fresh Windows machine still unverified. Current installed WebView2 runtime is available on the development host.
+- Old PySide fallback retained pending full parity/live acceptance. Do not remove backend or working Qt PDF engine.
+- Antigravity equals baseline; remove only during Phase 9 as authorized. Baseline and both specialist branches unchanged. Main still `f25d853550fba6f86ef8bdc7e4bde3da9118fce8`; no tag/release.
+- Default sandbox process startup fails; reviewed escalated commands work. No security rejection outstanding.
+- Stopped at a coherent Phase 7 checkpoint because remaining current-window usage reached 14%; no Phase 8 implementation begun.
