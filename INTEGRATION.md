@@ -125,3 +125,18 @@
 ### Next exact action
 
 Automated integration phases 1–11 are complete (Phase 5 explicitly pending live acceptance). Phase 12 cannot proceed until the documented real Znuny and clean-machine/DPI acceptance is supplied/completed. No credentials are available in this run. Do not search for stored credentials or repeat completed phases. Resume with personal interactive acceptance in the application, record real timings, resolve only verified issues and then assess release readiness. Licensing/third-party distribution notices also remain to be settled for public production distribution. Local installer exists and is tested within the documented scope; it has not been published as a GitHub Release.
+
+## Final release polish — phases A/B verified, 9 October 2026 — RESUME HERE
+
+The final release order supersedes the previous Phase 12 continuation. User confirmed real login, PBX/PBX Intern data, tickets/KPIs, installation, shortcuts/icons and the overall frontend. These are user-reported acceptance, not new agent measurements. Installed native Save-dialog PDF failure remains an unresolved release blocker.
+
+- Analytics handoff: `6c0285201206f1e57a5a97eb2d0e671150f8cd64`, codex/analytics-polish; clean, pushed, specialist completed. Full suite reported 324 passing tests. Handoff: ANALYTICS_POLISH.md on that branch.
+- Frontend handoff: `de701c967ae674bbd91ea6e7e01bc07b9057a924`, codex/frontend-polish; clean, pushed, specialist completed. Reported 288 Python, 46 frontend and 36 browser checks passing, plus frozen Qt-free host/PDF-worker probes. Handoff: FRONTEND_POLISH.md on that branch.
+- Local/remote HEADs agree. Merge-base of both branches, and each against integration, is exactly `118fb47280dacf93f98eb67713338bf451ae0c0d`. Both specialists idle; no work overwritten. Shared checkout returned from the clean frontend-polish branch to codex/integration for this documentation checkpoint only.
+- No new tests run: this phase verifies handoffs and ancestry; no application changes or merges made. Status/diff checked before checkpoint. Main/tag/release untouched.
+- Frontend tested analytics contract at `9da9eba`; integration must assess final analytics compatibility. Native PDF save dialog was not reproduced/fixed. Installed smoke bypassed dialog; it is not evidence that the reported bug is resolved.
+- Current usage reached 96% used. Per user limit, no large phase started. Automatic follow-up remains enabled; wait for sufficient quota before merging.
+
+Next exact phase C: read the final release attachment a5a76b71-4ca8-45ee-97fb-d30181e4b4b8 and both full handoff documents, verify unchanged HEADs/status, merge analytics-polish first into codex/integration, run full Python tests, fix only integration defects, commit/push. Then phase D: merge frontend-polish, resolve conflicts carefully, full Python/frontend/browser/build checks, checkpoint/push. Continue E–P from the final release order; no release until the installed PDF flow is fixed and validated. Fresh Windows/physical DPI unavailable must be stated accurately. No fabricated live timings. Branch deletion only after successful release.
+
+Checkpoint SHA: commit containing this note (`git log -1 --format=%H -- INTEGRATION.md`).
