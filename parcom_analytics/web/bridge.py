@@ -207,6 +207,9 @@ class DesktopBridge:
                     batch = fetch_live(self._client, batch.period, self._cancel, commit=False)
                 batch = load_history(self._client, batch, self._cancel)
                 self._publish_batch(batch)
+                from .dto import identities
+                with self._state_lock:
+                    self._settings.set({"agent_registry": identities(self._cache, self._settings, apply_overrides=False)})
         except ZnunyError:
             return self._error("network", "Die Ticket-Historie konnte nicht geladen werden. Der letzte Datenstand bleibt verfügbar.")
         except Exception:
@@ -226,6 +229,44 @@ class DesktopBridge:
             self._settings.set({"team_selection": sorted(set(selected))})
             self._revision += 1
         return {"ok": True, "data": self._state()}
+
+    def _agent_key(self, key):
+        from .dto import identities
+        registry = identities(self._cache, self._settings)
+        if isinstance(key, str) and key in registry:
+            return key
+        matches = [item["id"] for item in registry.values() if item["login"] and item["login"] == key]
+        if len(matches) == 1:
+            return matches[0]
+        raise ValueError("Unbekannter PBX-Techniker.")
+
+    def getAgentOverride(self, agent_key):
+        return self._read(lambda: self._settings.get("agent_overrides", {}).get(self._agent_key(agent_key), {}))
+
+    def _set_agent_override(self, agent_key, field=None, value=None):
+        from .dto import identities
+        def save():
+            key = self._agent_key(agent_key)
+            overrides = self._settings.get("agent_overrides", {})
+            if field:
+                if not isinstance(value, str) or not value.strip():
+                    raise ValueError("Bitte einen gültigen Namen oder ein Kürzel eingeben.")
+                overrides[key] = {**overrides.get(key, {}), field: value.strip()}
+            else:
+                overrides.pop(key, None)
+            self._settings.set({"agent_overrides": overrides})
+            self._revision += 1
+            return identities(self._cache, self._settings)[key]
+        return self._read(save)
+
+    def setAgentDisplayName(self, agent_key, name):
+        return self._set_agent_override(agent_key, "name", name)
+
+    def setAgentAbbreviation(self, agent_key, abbreviation):
+        return self._set_agent_override(agent_key, "code", abbreviation)
+
+    def resetAgentOverride(self, agent_key):
+        return self._set_agent_override(agent_key)
 
     def getExportOptions(self):
         from ..analytics import KPI_TITLES
@@ -291,7 +332,7 @@ class DesktopBridge:
                     return self._error("cancelled", "Laden abgebrochen.")
                 self._publish_batch(batch)
             with self._state_lock:
-                self._settings.set({"agent_registry": identities(self._cache, self._settings), "web_period_preset": selection.get("preset")})
+                self._settings.set({"agent_registry": identities(self._cache, self._settings, apply_overrides=False), "web_period_preset": selection.get("preset")})
                 self._changes = False
                 self._busy = False
             return {"ok": True, "data": self._state()}

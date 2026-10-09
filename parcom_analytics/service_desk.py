@@ -30,6 +30,8 @@ class Period:
     new_count: int = 0
     closed_count: int = 0
     issue: str = ""
+    period_start: str | None = None
+    period_end: str | None = None
 
 
 @dataclass
@@ -50,12 +52,20 @@ class Report:
     @property
     def current(self) -> Score | None:
         if self.scores and self.scores[-1].current.month == self.periods[-1].month:
+            if self.periods[-1].period_start and (
+                    self.scores[-1].current.period_start != self.periods[-1].period_start or
+                    self.scores[-1].current.period_end != self.periods[-1].period_end):
+                return None
             return self.scores[-1]
         return None
 
     @property
     def previous_score(self) -> Score | None:
         if self.current:
+            if self.current.current.period_start:
+                return next((score for score in self.scores
+                             if score.current.period_start == self.current.previous.period_start
+                             and score.current.period_end == self.current.previous.period_end), None)
             return next((score for score in self.scores
                          if score.current.month == self.current.previous.month), None)
         return None
@@ -190,5 +200,7 @@ def history_series(report: Report) -> pd.Series:
     """Keep calendar gaps visible instead of connecting unrelated scores."""
     if not report.scores:
         return pd.Series(dtype=float)
+    if report.scores[-1].current.period_start:
+        return pd.Series({score.current.period_end: score.value for score in report.scores})
     months = pd.period_range(report.scores[0].current.month, report.periods[-1].month, freq="M")
     return pd.Series({score.current.month: score.value for score in report.scores}).reindex(months.astype(str))

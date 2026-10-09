@@ -127,10 +127,15 @@ def export_management_pdf(path: Path, report: ManagementReport) -> None:
     body += table_html(pd.DataFrame(sources, columns=["KPI", "Berichtszeitraum / Datenstand", "Exportzeitpunkt", "Zeitzone", "Datenquelle"]))
     body += '<p>Monats-KPIs und Snapshots können unterschiedliche Zeitbezüge haben. Abschlussverhältnis und Ticketdifferenz werden nur für denselben Berichtsmonat berechnet.</p>'
     if score:
-        body += f'<p>Score: Exportmonat {month_label(score.current.month)} · Vergleich: {month_label(score.previous.month)}. '
+        if score.current.period_start:
+            selected = f'{datetime.fromisoformat(score.current.period_start):%d.%m.%Y %H:%M} – {datetime.fromisoformat(score.current.period_end):%d.%m.%Y %H:%M}'
+            previous = f'{datetime.fromisoformat(score.previous.period_start):%d.%m.%Y %H:%M} – {datetime.fromisoformat(score.previous.period_end):%d.%m.%Y %H:%M}'
+            body += f'<p>Score: ausgewählter Zeitraum {selected} · Vergleich: {previous}. '
+        else:
+            body += f'<p>Score: Exportmonat {month_label(score.current.month)} · Vergleich: {month_label(score.previous.month)}. '
         if performance.previous_score:
             delta = score.value-performance.previous_score.value
-            body += f'Vormonat: {format_value(performance.previous_score.value)} % · Veränderung: {"+" if delta > 0 else ""}{format_value(delta)} Prozentpunkte.'
+            body += f'{"Vorheriger Zeitraum" if score.current.period_start else "Vormonat"}: {format_value(performance.previous_score.value)} % · Veränderung: {"+" if delta > 0 else ""}{format_value(delta)} Prozentpunkte.'
         body += '</p>'
         body += table_html(pd.DataFrame([[name, f"{format_value(float(value))} %", "20 %"] for name, value in score.areas.items()],
                                        columns=["Teilbereich", "Score", "Gewicht"]))
@@ -146,7 +151,7 @@ def export_management_pdf(path: Path, report: ManagementReport) -> None:
         if item.history_note:
             body += f'<p>{escape(item.history_note)}</p>'
     if performance.scores:
-        body += '<h2>Service Desk Performance im Zeitverlauf</h2><p>Exportmonate · nur vollständig vergleichbare Datenstände; Lücken werden nicht verbunden.</p>'
+        body += '<h2>Service Desk Performance im Zeitverlauf</h2><p>' + ('Ausgewählte Intervalle' if performance.scores[-1].current.period_start else 'Exportmonate') + ' · nur vollständig vergleichbare Datenstände; Lücken werden nicht verbunden.</p>'
         figure = Figure(figsize=(10, 1.8), dpi=100)
         draw_score_history(figure, performance)
         body += add_chart(document, figure, "score", 165)

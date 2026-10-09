@@ -172,7 +172,9 @@ def draw_score_history(figure: Figure, report: Report) -> None:
     # Keep long histories readable while preserving every plotted period.
     step = max(1, (len(series) + 7) // 8)
     ticks = sorted(set(range(0, len(series), step)) | {len(series) - 1})
-    axis.set_xticks(ticks, [month_label(series.index[index]).replace(" ", "\n") for index in ticks])
+    interval = bool(report.scores[-1].current.period_start)
+    axis.set_xticks(ticks, [datetime.fromisoformat(series.index[index]).strftime("%d.%m.\n%H:%M") if interval
+                           else month_label(series.index[index]).replace(" ", "\n") for index in ticks])
     axis.tick_params(axis="both", length=0, labelsize=9, colors="#65727d", pad=8)
     axis.spines[["top", "right", "left", "bottom"]].set_visible(False)
     axis.grid(axis="y", color="white", linewidth=1)

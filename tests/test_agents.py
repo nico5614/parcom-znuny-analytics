@@ -21,7 +21,7 @@ def test_final_close_reopen_system_and_localized_state():
     assert closed_event(history,start,end,mapping)[0]=="69"
     history.append(event("StateUpdate","2026-10-04 08:00:00",1,Name="%%pending auto close+%%closed successful%%"))
     assert closed_event(history,start,end,mapping)[0]=="1"
-    assert code(75)=="ID 75" and code(81)=="ID 81" and identity(61)["name"]=="Nico Köchli"
+    assert code(75)=="LRO" and code(81)=="ID 81" and identity(61)["name"]=="Nico Köchli"
 
 
 def test_response_actor_window_ambiguity_and_owner_never_used():

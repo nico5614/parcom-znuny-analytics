@@ -1,6 +1,8 @@
 """Verified identities and event-based agent attribution, without owner inference."""
 
 from statistics import median
+import re
+import unicodedata
 
 from .live_metrics import server_datetime
 from .analytics import numeric_values
@@ -14,7 +16,7 @@ SEED_AGENTS = {
     "69": ("diogorelvas", "Diogo Mendes Relvas", "DRE"),
     "70": ("larsschmidli", "Lars Schmidli", "LSC"),
     "71": ("rojenkarayapi", "Rojen Karayapi", "RKA"),
-    "75": ("lewinroos", "lewinroos", None),
+    "75": ("lewinroos", "Lewin Roos", "LRO"),
     "76": ("livioriederer", "Livio Riederer", "LRI"),
     "80": ("Krishnamenan", "Krishnamenan Sandirasegaram", "KSA"),
 }
@@ -45,6 +47,57 @@ def identity(value, login=None):
             "name":known[1] if known else str(login or f"ID {agent_id}"), "code":code(agent_id)}
 
 
+def abbreviation(name):
+    """First initial and first two surname letters, with consistent transliteration."""
+    name = str(name).translate(str.maketrans({"ß": "ss", "ẞ": "SS", "ø": "o", "Ø": "O", "ł": "l", "Ł": "L", "æ": "ae", "Æ": "AE", "œ": "oe", "Œ": "OE"}))
+    plain = "".join(char for char in unicodedata.normalize("NFKD", name) if not unicodedata.combining(char))
+    words = [re.sub(r"[^A-Za-z]", "", word) for word in plain.split()]
+    words = [word for word in words if word]
+    return (words[0][0] + words[-1][:2]).upper() if len(words) >= 2 else None
+
+
+def resolved_identity(item, override=None):
+    item, override = dict(item), override or {}
+    item["name"] = override.get("name", item["name"])
+    # Existing explicit codes take priority over automatic generation.
+    explicit = item.get("code") if not str(item.get("code", "")).startswith("ID ") else None
+    item["code"] = override.get("code") or explicit or abbreviation(item["name"]) or f'ID {item["id"]}'
+    return item
+
+
+def discover(batch, registry=None):
+    """Keep only humans observed in PBX/PBX Intern, using mappings just for names."""
+    from .znuny import DEFAULT_QUEUES
+    registry = registry or {}
+    observed = {key for key, item in registry.items() if item.get("pbxObserved") and key != "1"}
+    logins = {}
+    if batch:
+        for frame in (*batch.frames.values(), *batch.previous.values()):
+            scoped = frame.loc[frame["Queue"].isin(DEFAULT_QUEUES)]
+            for row in scoped.reindex(columns=["OwnerID", "OwnerLogin", "ClosedByID", "ResponseByID"]).drop_duplicates().to_dict("records"):
+                for column in ("OwnerID", "ClosedByID", "ResponseByID"):
+                    key = identifier(row.get(column))
+                    if key and key != "1":
+                        observed.add(key)
+                        if column == "OwnerID" and isinstance(row.get("OwnerLogin"), str) and row["OwnerLogin"]:
+                            logins[key] = row["OwnerLogin"]
+        for row in batch.agents:
+            if row.get("Queue") not in (*DEFAULT_QUEUES, None):
+                continue
+            for column in ("ClosedByID", "ResponseByID"):
+                key = identifier(row.get(column))
+                if key and key != "1":
+                    observed.add(key)
+        observed.update(item["id"] for item in batch.identities if item.get("pbxObserved") and item["id"] != "1")
+    mappings = {**registry, **{item["id"]: item for item in batch.identities}} if batch else registry
+    result = {}
+    for key in observed:
+        item = {**identity(key, logins.get(key)), **mappings.get(key, {})}
+        item["pbxObserved"] = True
+        result[key] = item
+    return result
+
+
 def state_types(tickets):
     result = dict(KNOWN_STATE_TYPES)
     for ticket in tickets:
@@ -56,11 +109,11 @@ def state_types(tickets):
     return result
 
 
-def closed_event(history, start, end, mapping):
+def closed_event(history, start, end, mapping, *, include_end=False):
     qualifying = []
     for event in history:
         stamp = server_datetime(event.get("CreateTime"))
-        if event.get("HistoryType") != "StateUpdate" or not stamp or not start <= stamp < end:
+        if event.get("HistoryType") != "StateUpdate" or not stamp or not (start <= stamp < end or (include_end and stamp == end)):
             continue
         parts = [part for part in str(event.get("Name", "")).split("%%") if part]
         target = parts[-1] if parts else ""
@@ -93,17 +146,61 @@ def response_actor(ticket, history):
 
 def metrics(batch, selected):
     import pandas as pd
-    opened = batch.frames[3].drop_duplicates("TicketID")
+    from .znuny import DEFAULT_QUEUES
+    from .comparisons import comparison, snapshot_context
+    opened = batch.frames[3].loc[batch.frames[3]["Queue"].isin(DEFAULT_QUEUES)].drop_duplicates("TicketID")
     activity = pd.DataFrame(batch.agents)
+    if not activity.empty and "Queue" in activity:
+        activity = activity.loc[activity["Queue"].isin(DEFAULT_QUEUES) | activity["Queue"].isna()]
     rows = []
     for agent_id in selected:
+        if agent_id == "1":
+            continue
         owned = opened["OwnerID"].map(str).eq(agent_id)
         current = activity.loc[activity["period"].eq("current")] if not activity.empty else activity
         closed = current.loc[current["ClosedByID"].map(str).eq(agent_id)] if not current.empty else current
         responses = current.loc[current["ResponseByID"].map(str).eq(agent_id)] if not current.empty else current
+        if not current.empty:
+            closed = closed.drop_duplicates("TicketID")
+            responses = responses.drop_duplicates("TicketID")
         times = numeric_values(responses["response_minutes"]).dropna() if not responses.empty else []
+        previous = activity.loc[activity["period"].eq("previous") & activity["ResponseByID"].map(str).eq(agent_id)] if not activity.empty else activity
+        if not previous.empty:
+            previous = previous.drop_duplicates("TicketID")
+        old_closed = activity.loc[activity["period"].eq("previous") & activity["ClosedByID"].map(str).eq(agent_id)].drop_duplicates("TicketID") if not activity.empty else activity
+        old_times = numeric_values(previous["response_minutes"]).dropna() if not previous.empty else []
+        response_median = float(median(times)) if len(times) else None
+        response_mean = float(sum(times) / len(times)) if len(times) else None
+        old_median = float(median(old_times)) if len(old_times) else None
+        old_mean = float(sum(old_times) / len(old_times)) if len(old_times) else None
         rows.append({"id":agent_id, "Techniker":code(agent_id), "Aktuell im Besitz":int(owned.sum()),
                      "Davon gesperrt":int((owned & opened["Sperre"].eq("Gesperrt")).sum()),
                      "Geschlossen":len(closed), "Erstantworten":len(responses),
-                     "Reaktionszeit (Min.)":float(median(times)) if len(times) else None})
+                     "Reaktionszeit (Min.)":response_median,
+                     "medianResponseMinutes":response_median, "meanResponseMinutes":response_mean,
+                     "responseComparison":comparison(response_median, old_median, unit="minutes"),
+                     "meanResponseComparison":comparison(response_mean, old_mean, unit="minutes"),
+                     "closedComparison":comparison(len(closed), len(old_closed), higher_is_better=True),
+                     "responseCountComparison":comparison(len(responses), len(previous), higher_is_better=True)})
+    rows.sort(key=lambda row: (-row["Geschlossen"], row["id"]))
+    most = max((row["Geschlossen"] for row in rows), default=0)
+    rank, last_count = 0, None
+    for index, row in enumerate(rows, 1):
+        if row["Geschlossen"] != last_count:
+            rank, last_count = index, row["Geschlossen"]
+        row["rank"] = rank if batch.history_loaded else None
+        row["historyLoaded"] = batch.history_loaded
+        row["isPeriodWinner"] = bool(batch.history_loaded and most > 0 and row["Geschlossen"] == most)
+        if not snapshot_context(batch)["snapshotIsNow"]:
+            row["Aktuell im Besitz"] = row["Davon gesperrt"] = None
+        if not batch.history_loaded:
+            # Legacy Qt consumers sort numeric counts before masking unloaded history.
+            # The WebView DTO masks these compatibility fields explicitly below.
+            row["Geschlossen"] = row["Erstantworten"] = 0
+            for key in ("Reaktionszeit (Min.)", "medianResponseMinutes", "meanResponseMinutes"):
+                row[key] = None
+            row["responseComparison"] = comparison(None, unit="minutes")
+            row["meanResponseComparison"] = comparison(None, unit="minutes")
+            row["closedComparison"] = comparison(None, higher_is_better=True)
+            row["responseCountComparison"] = comparison(None, higher_is_better=True)
     return rows

@@ -61,8 +61,8 @@ def test_refresh_rolling_now_and_fixed_custom_and_change_banner(qapp,tmp_path,mo
 
 
 def test_live_details_safe_deep_link_and_paginated_export(qapp,tmp_path,batch,monkeypatch):
-    period=TimeRange(datetime(2026,8,1,tzinfo=ZURICH),datetime(2026,9,1,tzinfo=ZURICH))
-    batch=replace(batch,period=period)
+    period=TimeRange.preset("1M")
+    batch=replace(batch,period=period,captured_at=period.end.isoformat(),snapshot_is_now=True)
     for frame in batch.frames.values():
         frame["TicketID"]=[str(i) for i in range(len(frame))]
         frame["Aktuell eskaliert"]=[1,0,0,0,0,0]

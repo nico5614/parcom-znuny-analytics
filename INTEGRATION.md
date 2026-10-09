@@ -140,3 +140,10 @@ The final release order supersedes the previous Phase 12 continuation. User conf
 Next exact phase C: read the final release attachment a5a76b71-4ca8-45ee-97fb-d30181e4b4b8 and both full handoff documents, verify unchanged HEADs/status, merge analytics-polish first into codex/integration, run full Python tests, fix only integration defects, commit/push. Then phase D: merge frontend-polish, resolve conflicts carefully, full Python/frontend/browser/build checks, checkpoint/push. Continue E–P from the final release order; no release until the installed PDF flow is fixed and validated. Fresh Windows/physical DPI unavailable must be stated accurately. No fabricated live timings. Branch deletion only after successful release.
 
 Checkpoint SHA: commit containing this note (`git log -1 --format=%H -- INTEGRATION.md`).
+
+## Release polish phase C — completed, 9 October 2026
+
+- Previous checkpoint: `0d1efbe`. Merged analytics-polish `6c0285201206f1e57a5a97eb2d0e671150f8cd64` without textual conflicts; specialist implementation preserved.
+- Full integrated Python suite: 324 passed in 63.56 s. Evidence: ignored `.validation/release-phase-c.log`. Diff/status reviewed; no frontend implementation merged in this phase.
+- Checkpoint: merge commit containing this entry. Next phase D: merge frontend-polish `de701c967ae674bbd91ea6e7e01bc07b9057a924`, reconcile only actual conflicts, run full Python/frontend/browser/build checks, commit/push before further acceptance.
+- Installed native save-dialog PDF failure remains unresolved. Main/tag/release untouched.
