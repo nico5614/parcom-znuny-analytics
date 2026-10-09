@@ -162,3 +162,10 @@ Checkpoint SHA: commit containing this note (`git log -1 --format=%H -- INTEGRAT
 - Combined UI behavior is covered by phase D's 36 browser checks; source native probe is synthetic and bypasses the save dialog. It does not resolve the installed PDF blocker.
 - User-confirmed real login, PBX/PBX Intern load, ticket/KPI function, installation/icons and general layout acceptance retained. No new personal live session or production measurements available in this run, so detailed post-polish live acceptance is not newly claimed.
 - No application fixes needed. Next F: record available performance evidence and live-measurement boundary; G visual/theme/animation review; H reproduce the installed native save flow. Checkpoint: commit containing this note.
+
+## Release polish phase F — available performance evidence recorded, 9 October 2026
+
+- Phase E checkpoint: `1458481`. No new personal live session is available, so no production TicketSearch/Get/History durations or naturally changed-ticket timings are invented. Earlier user-confirmed live functionality remains accepted.
+- The combined 330-test suite includes connection reuse, max-concurrency=4, deduplication, delta cache, lazy/versioned history and failed-refresh persistence regressions. Fresh integrated browser fixtures and navigation checks do not add backend REST calls.
+- Specialist synthetic counts remain the available benchmark evidence: initial 7 searches/40 gets/0 history; unchanged refresh 8/0/0; four changed tickets 8/4/0; first history demand 1/0/40, then unchanged demand 1/0/0. These are synthetic, not server measurements; full methodology in ANALYTICS_POLISH.md.
+- No code changes required. Next G: review merged light/dark UI, responsive charts/agent presentation and motion controls. Then H: native installed PDF-dialog blocker. Checkpoint: commit containing this entry.
