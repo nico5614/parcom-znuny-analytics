@@ -155,3 +155,10 @@ Checkpoint SHA: commit containing this note (`git log -1 --format=%H -- INTEGRAT
 - Median-primary metrics, backend contexts/directions, historical missing snapshots, human winners/local overrides, light-first theme, credential-store isolation, confirmations and reduced motion retain specialist tests. No formulas rewritten.
 - Diff/status checked. Checkpoint: merge commit containing this entry. Next phase E: native integrated source acceptance; preserve user-confirmed baseline live acceptance and document any unavailable new live checks. Then F performance evidence, G visual review, H unresolved installed native Save-dialog PDF blocker.
 - No production EXE/installer yet built from the combined polish. Existing dist artifacts are specialist/older integration builds. Main/tag/release untouched.
+
+## Release polish phase E — source validation completed, 9 October 2026
+
+- Phase D checkpoint: `4d50c44`. Native integrated source WebView2 start succeeded with local production assets and React/Python bridge acknowledgement. All seven report adapters plus agents and both actual PDF-worker flows succeeded; host Qt modules/DLLs empty before/after. Evidence: `.validation/release-source.json`.
+- Combined UI behavior is covered by phase D's 36 browser checks; source native probe is synthetic and bypasses the save dialog. It does not resolve the installed PDF blocker.
+- User-confirmed real login, PBX/PBX Intern load, ticket/KPI function, installation/icons and general layout acceptance retained. No new personal live session or production measurements available in this run, so detailed post-polish live acceptance is not newly claimed.
+- No application fixes needed. Next F: record available performance evidence and live-measurement boundary; G visual/theme/animation review; H reproduce the installed native save flow. Checkpoint: commit containing this note.
