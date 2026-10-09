@@ -13,7 +13,7 @@ from .serialization import json_value
 
 
 class DesktopBridge:
-    def __init__(self, publish=lambda event: None, client=None, root=None, cache=None, settings=None, fetch=None, choose_save=None):
+    def __init__(self, publish=lambda event: None, client=None, root=None, cache=None, settings=None, fetch=None, choose_save=None, credential_store=None):
         self._publish = publish
         self._lock = Lock()
         self._probe_sequence = 0
@@ -34,8 +34,11 @@ class DesktopBridge:
         self._fetch = fetch
         self._choose_save = choose_save
         self._export_lock = Lock()
+        self._last_successful_connection = None
+        from .credentials import CredentialStore
+        self._credentials = credential_store or CredentialStore()
 
-    def login(self, username, password):
+    def login(self, username, password, save_credentials=False):
         from ..znuny import ZnunyClient, LoginError, ConnectionError, ZnunyError
         if not isinstance(username, str) or not username.strip() or not isinstance(password, str) or not password:
             return {"ok": False, "error": {"kind": "validation", "message": "Bitte Benutzername und Passwort eingeben."}}
@@ -52,7 +55,14 @@ class DesktopBridge:
             with self._state_lock:
                 self._username = username.strip()
                 self._offline = False
-            return {"ok": True, "data": {"username": self._username}}
+                self._last_successful_connection = datetime.now(timezone.utc).isoformat()
+            session = {"username": self._username}
+            if save_credentials is True:
+                try:
+                    self._credentials.save(self._username, password)
+                except Exception:
+                    session["credentialWarning"] = "Angemeldet. Die Zugangsdaten konnten nicht im Windows-Schlüsselspeicher gespeichert werden."
+            return {"ok": True, "data": session}
         except LoginError:
             return {"ok": False, "error": {"kind": "authentication", "message": "Anmeldung fehlgeschlagen. Bitte Benutzername und Passwort prüfen."}}
         except ConnectionError:
@@ -64,6 +74,28 @@ class DesktopBridge:
         finally:
             password = None
             self._network.release()
+
+    def getSavedCredentials(self):
+        try:
+            return self._credentials.status()
+        except Exception:
+            return {"supported": False, "available": False, "username": None}
+
+    def loginSaved(self):
+        try:
+            credential = self._credentials.get()
+            if credential is None:
+                return self._error("credentials", "Keine gespeicherten Zugangsdaten vorhanden.")
+            return self.login(credential.username, credential.password)
+        except Exception:
+            return self._error("credentials", "Die gespeicherten Zugangsdaten sind nicht verfügbar.")
+
+    def removeSavedCredentials(self):
+        try:
+            self._credentials.remove()
+            return {"ok": True, "data": None}
+        except Exception:
+            return self._error("credentials", "Die gespeicherten Zugangsdaten konnten nicht entfernt werden.")
 
     def logout(self):
         self._cancel.set()
@@ -94,14 +126,15 @@ class DesktopBridge:
             return {"connection": "online" if self._client and self._client.connected else "cached" if self._cache.batch else "offline",
                     "busy": self._busy, "newData": self._changes, "revision": self._revision,
                     "capturedAt": self._cache.batch.captured_at if self._cache.batch else None,
-                    "hasCache": self._cache.batch is not None, "warning": self._cache.warning}
+                    "hasCache": self._cache.batch is not None, "warning": self._cache.warning,
+                    "lastSuccessfulConnection": self._last_successful_connection or (self._cache.batch.captured_at if self._cache.batch else None)}
 
     def getState(self):
         return self._state()
 
     def getPreferences(self):
         self._ensure_data()
-        return {"theme": self._settings.get("web_theme", "dark"), "reducedMotion": self._settings.get("reduce_motion", False)}
+        return {"theme": self._settings.get("web_theme", "light"), "reducedMotion": self._settings.get("reduce_motion", False)}
 
     def setPreferences(self, theme, reduced_motion):
         if theme not in ("dark", "light") or type(reduced_motion) is not bool:
@@ -335,6 +368,7 @@ class DesktopBridge:
                 self._settings.set({"agent_registry": identities(self._cache, self._settings, apply_overrides=False), "web_period_preset": selection.get("preset")})
                 self._changes = False
                 self._busy = False
+                self._last_successful_connection = datetime.now(timezone.utc).isoformat()
             return {"ok": True, "data": self._state()}
         except ValueError as error:
             return self._error("validation", str(error))
@@ -359,6 +393,7 @@ class DesktopBridge:
             stamp = datetime.fromisoformat(batch.load_started_at or batch.captured_at).astimezone(timezone.utc) - timedelta(seconds=1)
             changed = bool(self._client.search_tickets({"TicketLastChangeTimeNewerDate": stamp.strftime("%Y-%m-%d %H:%M:%S"), "SearchInArchive": "AllTickets"}, limit=1))
             self._changes = self._changes or changed
+            self._last_successful_connection = datetime.now(timezone.utc).isoformat()
         except ZnunyError:
             self._client.connected = False
         finally:

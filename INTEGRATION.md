@@ -147,3 +147,11 @@ Checkpoint SHA: commit containing this note (`git log -1 --format=%H -- INTEGRAT
 - Full integrated Python suite: 324 passed in 63.56 s. Evidence: ignored `.validation/release-phase-c.log`. Diff/status reviewed; no frontend implementation merged in this phase.
 - Checkpoint: merge commit containing this entry. Next phase D: merge frontend-polish `de701c967ae674bbd91ea6e7e01bc07b9057a924`, reconcile only actual conflicts, run full Python/frontend/browser/build checks, commit/push before further acceptance.
 - Installed native save-dialog PDF failure remains unresolved. Main/tag/release untouched.
+
+## Release polish phase D — completed, 9 October 2026
+
+- Phase C checkpoint: `8c48146`. Merged frontend-polish `de701c967ae674bbd91ea6e7e01bc07b9057a924`; automatic bridge merge reviewed, no textual conflicts or integration fixes required.
+- Combined full Python suite: 330 passed in 77.50 s. Frontend: 46 passed. TypeScript/Vite production build passed. Browser: 36 passed in 58.1 s using freshly generated DTOs from the actual merged backend, not the older exported contract.
+- Median-primary metrics, backend contexts/directions, historical missing snapshots, human winners/local overrides, light-first theme, credential-store isolation, confirmations and reduced motion retain specialist tests. No formulas rewritten.
+- Diff/status checked. Checkpoint: merge commit containing this entry. Next phase E: native integrated source acceptance; preserve user-confirmed baseline live acceptance and document any unavailable new live checks. Then F performance evidence, G visual review, H unresolved installed native Save-dialog PDF blocker.
+- No production EXE/installer yet built from the combined polish. Existing dist artifacts are specialist/older integration builds. Main/tag/release untouched.
