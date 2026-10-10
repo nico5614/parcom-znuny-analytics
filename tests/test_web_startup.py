@@ -7,6 +7,42 @@ import textwrap
 from parcom_analytics.web import pdf_export
 
 
+def test_native_pdf_dialog_filter_and_selected_path(monkeypatch, tmp_path):
+    from unittest.mock import MagicMock
+    import webview
+    from webview.util import parse_file_type
+    from parcom_analytics.web import app
+
+    entry = tmp_path / "index.html"
+    entry.write_text("<html></html>")
+    monkeypatch.setattr(app, "asset_root", lambda: tmp_path)
+    monkeypatch.setattr(app, "serve", lambda directory: (MagicMock(), "http://127.0.0.1:12345/index.html"))
+    monkeypatch.setattr(sys, "argv", ["start_web.py"])
+    bridge = MagicMock()
+    monkeypatch.setattr(app, "DesktopBridge", lambda: bridge)
+    window = MagicMock()
+    monkeypatch.setattr(webview, "create_window", lambda *args, **kwargs: window)
+    selected = str(tmp_path / "Report with spaces.pdf")
+    results = iter([(selected,), None])
+
+    def dialog(dialog_type, **kwargs):
+        assert dialog_type == webview.FileDialog.SAVE
+        # Use the shipped parser: punctuation in a filter description can fail
+        # before Windows displays the dialog, which worker-only smoke tests miss.
+        assert [parse_file_type(value)[1] for value in kwargs["file_types"]] == ["*.pdf"]
+        assert kwargs["save_filename"] == "report.pdf"
+        return next(results)
+
+    window.create_file_dialog.side_effect = dialog
+
+    def start(*args, **kwargs):
+        assert bridge._choose_save("report.pdf") == selected
+        assert bridge._choose_save("report.pdf") is None
+
+    monkeypatch.setattr(webview, "start", start)
+    assert app.main() == 0
+
+
 def test_normal_webview_startup_when_every_qt_import_is_forbidden():
     script = textwrap.dedent('''
         import builtins, sys, tempfile

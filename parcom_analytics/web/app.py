@@ -66,7 +66,7 @@ def main():
         control.CoreWebView2InitializationCompleted += disable_form_storage
     window.events.before_show += secure_native
     def choose_save(filename):
-        result = window.create_file_dialog(webview.FileDialog.SAVE, save_filename=filename, file_types=("PDF-Dateien (*.pdf)",))
+        result = window.create_file_dialog(webview.FileDialog.SAVE, save_filename=filename, file_types=("PDF Dateien (*.pdf)",))
         return result[0] if result else None
     bridge._choose_save = choose_save
 
