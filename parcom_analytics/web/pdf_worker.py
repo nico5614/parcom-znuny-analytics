@@ -12,7 +12,9 @@ def main(request):
     from ..pdf_export import export_management_pdf, export_pdf
     from ..reports import ManagementReport
     from ..storage import period_label
-    os.environ["QT_QPA_PLATFORM"] = "offscreen"
+    # The offscreen plugin has no Windows system fonts. No widgets are shown,
+    # but the native plugin is needed for readable, embedded PDF text.
+    os.environ["QT_QPA_PLATFORM"] = "windows" if sys.platform == "win32" else "offscreen"
     app = QApplication.instance() or QApplication([])
     # This private file is created by this process; it never comes from JS or Znuny.
     with Path(request).open("rb") as stream:

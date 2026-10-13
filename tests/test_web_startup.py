@@ -34,10 +34,30 @@ def test_native_pdf_dialog_filter_and_selected_path(monkeypatch, tmp_path):
         return next(results)
 
     window.create_file_dialog.side_effect = dialog
+    # Model native dispatch and verify that the dialog is never opened directly
+    # on the bridge worker thread.
+    import types
+    dispatching = False
+    def invoke(callback):
+        nonlocal dispatching
+        dispatching = True
+        try:
+            return callback()
+        finally:
+            dispatching = False
+    original_dialog = dialog
+    def dispatched_dialog(*args, **kwargs):
+        assert dispatching
+        return original_dialog(*args, **kwargs)
+    window.native.Invoke.side_effect = invoke
+    window.create_file_dialog.side_effect = dispatched_dialog
+    monkeypatch.setitem(sys.modules, "System", types.SimpleNamespace(
+        Func={str: lambda callback: callback}, String=str))
 
     def start(*args, **kwargs):
         assert bridge._choose_save("report.pdf") == selected
         assert bridge._choose_save("report.pdf") is None
+        assert window.native.Invoke.call_count == 2
 
     monkeypatch.setattr(webview, "start", start)
     assert app.main() == 0
@@ -73,6 +93,30 @@ def test_normal_webview_startup_when_every_qt_import_is_forbidden():
     subprocess.run([sys.executable, "-c", script], check=True, capture_output=True, text=True, timeout=30)
 
 
+def test_pdf_worker_initializes_readable_windows_fonts():
+    if sys.platform != "win32":
+        import pytest
+        pytest.skip("Windows font database regression")
+    script = textwrap.dedent('''
+        import pickle, tempfile
+        from pathlib import Path
+        from PySide6.QtGui import QFont, QRawFont
+        from parcom_analytics import pdf_export
+        from parcom_analytics.reports import ManagementReport
+        from parcom_analytics.web.pdf_worker import main
+        def verify_fonts(*args):
+            font = QRawFont.fromFont(QFont("Segoe UI", 9))
+            assert font.isValid()
+            assert all(font.supportsCharacter(ord(c)) for c in "Service Desk äöü 0123")
+        pdf_export.export_management_pdf = verify_fonts
+        with tempfile.TemporaryDirectory() as directory:
+            request = Path(directory) / "request.pickle"
+            request.write_bytes(pickle.dumps((None, ManagementReport.__new__(ManagementReport))))
+            main(request)
+    ''')
+    subprocess.run([sys.executable, "-c", script], check=True, capture_output=True, text=True, timeout=30)
+
+
 def test_frozen_export_launches_separate_bundle_and_leaves_host_environment(monkeypatch, tmp_path):
     import os
     calls = []
@@ -91,7 +135,7 @@ def test_frozen_export_launches_separate_bundle_and_leaves_host_environment(monk
     assert command[0] == str(tmp_path / "pdf_worker" / "ParCom_PDF_Worker.exe")
     assert not Path(command[1]).exists()
     assert kwargs["env"]["PYINSTALLER_RESET_ENVIRONMENT"] == "1"
-    assert kwargs["env"]["QT_QPA_PLATFORM"] == "offscreen"
+    assert kwargs["env"]["QT_QPA_PLATFORM"] == ("windows" if sys.platform == "win32" else "offscreen")
     assert dict(os.environ) == original_environment
 
 

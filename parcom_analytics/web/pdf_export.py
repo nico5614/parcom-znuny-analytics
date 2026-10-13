@@ -17,7 +17,7 @@ def run_export(path, report):
             command = [str(worker), str(request)]
         else:
             command = [sys.executable, "-m", "parcom_analytics.web.pdf_worker", str(request)]
-        environment = {**os.environ, "QT_QPA_PLATFORM": "offscreen", "MPLBACKEND": "Agg"}
+        environment = {**os.environ, "QT_QPA_PLATFORM": "windows" if sys.platform == "win32" else "offscreen", "MPLBACKEND": "Agg"}
         # The main bootloader changes Windows' DLL search directory. Reset it in
         # this dedicated child bootloader; never change the running host's loader.
         environment["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
