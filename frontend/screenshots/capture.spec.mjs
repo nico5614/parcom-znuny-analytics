@@ -11,10 +11,12 @@ test('capture the implemented frontend with anonymous synthetic Python DTOs', as
   page.on('pageerror', error => errors.push(error.message))
   const capture = async name => {
     await page.evaluate(() => document.fonts.ready)
+    // Wait for Chart.js canvas animation, which screenshot CSS controls do not stop.
+    await page.waitForTimeout(1200)
     await page.screenshot({ path: fileURLToPath(new URL(`${name}.png`, destination)), fullPage: true, animations: 'disabled' })
   }
   const nav = name => page.getByRole('navigation', { name: 'Hauptnavigation' }).getByRole('button', { name, exact: true })
-  await setup(page, data)
+  await setup(page, { ...data, initialTheme: 'light' })
   await expect(page.getByRole('button', { name: 'Anmelden', exact: true })).toBeVisible()
   await capture('login')
   await page.getByRole('button', { name: 'Lokalen Datenstand öffnen' }).click()

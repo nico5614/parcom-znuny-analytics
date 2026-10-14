@@ -15,9 +15,9 @@
 
 ![ParCom Znuny Analytics – Übersicht](docs/screenshots/dashboard-hero.png)
 
-*Integriertes Produktionsfrontend mit anonymen, synthetischen Beispieldaten. Keine echten Kunden- oder Anmeldedaten. Der fehlende Monatsvergleich wird bewusst als «–» dargestellt.*
+*Integriertes Produktionsfrontend mit anonymen, synthetischen Beispieldaten. Keine echten Kunden- oder Anmeldedaten. Fehlende vergleichbare Datenstände werden bewusst als «–» dargestellt.*
 
-**Version 1.0.0 · Integrationsstand, noch keine Produktionsfreigabe.** EXE und Installer wurden auf dem Entwicklungsrechner geprüft. Die persönliche Znuny-Live-Abnahme, eine frische Windows-Installation und ein physischer DPI-Wechsel stehen noch aus. Daher sind Main-Merge, Tag und GitHub Release nicht freigegeben. Details: [VALIDATION.md](VALIDATION.md) und [INTEGRATION.md](INTEGRATION.md).
+**Version 1.0.0 · Integrationsstand, noch keine Produktionsfreigabe.** EXE und Installer wurden auf dem Entwicklungsrechner geprüft. Die echte Znuny-Anmeldung und Live-Datenfunktion wurden vom Benutzer bestätigt; die native Sichtprüfung ist bestanden. Die abschliessende installierte PDF-Dialogprüfung und finale Release-Prüfungen stehen noch aus. Eine frische Windows-Installation und physische DPI-Wechsel wurden nicht geprüft. Daher sind Main-Merge, Tag und GitHub Release nicht freigegeben. Details: [VALIDATION.md](VALIDATION.md) und [INTEGRATION.md](INTEGRATION.md).
 
 ## Inhaltsverzeichnis
 
@@ -158,7 +158,7 @@ Deinstallation erfolgt über Windows **Installierte Apps**. Lokale Anwendungsdat
 
 Die Timeline bietet **1T / 1W / 1M / 3M / 6M / 1J**, zwei verschiebbare Grenzen und exakte Von-/Bis-Felder. Zulässig sind ein Tag bis ein Kalenderjahr ohne zukünftiges Ende; Anzeigezeitzone ist **Europe/Zurich**. Vordefinierte Zeiträume rücken beim Aktualisieren weiter, ein eigener Zeitraum bleibt fest.
 
-Neue und geschlossene Tickets beziehen sich auf den gewählten Zeitraum. Offene, eskalierte und wartende Tickets zeigen den aktuellen Bestand. Rückwirkende Abfragen erzeugen keine historischen Bestände. Vergleichszeiträume sind gleich lang und unmittelbar vorgelagert.
+Neue und geschlossene Tickets sowie Servicezeiten beziehen sich auf den gewählten Zeitraum; der Vergleich ist gleich lang und unmittelbar vorgelagert. Gemeinsame Zeitraumgrenzen werden nicht doppelt gezählt. Bestandskennzahlen sind als «Stand jetzt» oder historisch als «Stand am …» gekennzeichnet. Historische Werte und Bestandsdeltas erscheinen nur mit exakt erhobenen passenden Snapshots; heutige Tickets ersetzen keinen historischen Bestand. Reaktions- und Lösungszeit zeigen primär den Median, den Durchschnitt ergänzend.
 
 Alle zwei Minuten prüft eine kleine Suche auf Änderungen. **Neuer Datenstand verfügbar** weist auf neue Daten hin; erst ein ausdrücklicher Refresh ersetzt den angezeigten Stand. Während Hintergrundanfragen bleiben Navigation und vorhandene Daten verfügbar.
 
@@ -170,11 +170,11 @@ Agentenabschlüsse stammen aus der Ticket-Historie; aktueller Besitzer und `Chan
 
 ### Service Desk Performance
 
-Der Score ist ein **Trendindex, keine SLA-Erfüllung**. 100 % bedeutet keine Verschlechterung gegenüber dem Vergleichsmonat; auch unverändert hoher Backlog kann 100 % ergeben. Neue und geschlossene Tickets dienen als Kontext ohne Score-Gewicht.
+Der Score ist ein **Trendindex, keine SLA-Erfüllung**. 100 % bedeutet keine Verschlechterung gegenüber dem vorherigen gleich langen Vergleichszeitraum; auch unverändert hoher Backlog kann 100 % ergeben. Neue und geschlossene Tickets dienen als Kontext ohne Score-Gewicht.
 
 Fünf Bereiche zählen je 20 %: Backlog, Erstantwort-Eskalationsquote, mediane Reaktionszeit, mediane Lösungszeit und wartende Tickets. Backlog und wartende Tickets berücksichtigen Anzahl und Anteil über 30 Tage. Pro Teilkennzahl gilt: aktuell ≤ vorher ergibt 100 %, sonst `100 × vorher / aktuell`. Von 0 auf 0 ergibt 100 %, von 0 auf einen positiven Wert 0 %. Verbesserungen sind bei 100 % gedeckelt. Diese Erstantwort-Eskalationsformel ist von der allgemeinen Live-Eskalationsanalyse zu unterscheiden.
 
-Erforderlich sind alle sieben Kennzahlen, vollständige aufeinanderfolgende Vergleichsmonate und tatsächlich erhobene gemeinsame Snapshot-Tage. Eine Wochenabfrage allein genügt nicht. Bei fehlender Historie oder unbestimmten Eingangswerten erscheint kein Score. Die aufklappbare Erklärung zeigt Berechnung, Teilbereiche und Datenbasis.
+Erforderlich sind alle sieben Kennzahlen für den ausgewählten und den unmittelbar vorherigen gleich langen Zeitraum sowie die passenden tatsächlich erhobenen Bestands-Snapshots. Auch eine Wochenansicht kann bei vollständiger Vergleichsbasis bewertet werden. Für einen Vergleich mit dem vorherigen Score wird zusätzlich dessen Vergleichsbasis benötigt. Bei fehlender Historie oder unbestimmten Eingangswerten erscheint kein Score. Die aufklappbare Erklärung zeigt Berechnung, Teilbereiche und Datenbasis.
 
 ### PDF-Berichte
 
@@ -249,7 +249,7 @@ Lokaler Speicher: `%LOCALAPPDATA%\ParCom\ZnunyAnalytics\`.
 
 Der Cache enthält Ticketdetails, Titel, Kundenkennungen und Agentenreferenzen. Es gibt keine zusätzliche lokale Verschlüsselung; der Speicher unterliegt den Windows-Benutzerrechten. Keine Telemetrie, externe Analysedienste oder zusätzliche Datenbank.
 
-Passwort und Session-ID werden nicht persistent gespeichert oder protokolliert. Die Sitzung liegt im Python-Arbeitsspeicher; Abmelden und reguläres Schliessen versuchen `SessionDelete`. TLS-Prüfung bleibt aktiv, Windows-Zertifikate werden über `truststore` genutzt. Zugriffe erfolgen mit den persönlichen Znuny-Berechtigungen; unvollständige Suchergebnisse werden nicht als vollständiger Datenstand übernommen. Ticketlinks enthalten keine Session-ID. Die WebView-Navigation ist auf die lokalen Anwendungsassets begrenzt; Ticketlinks werden im externen Browser geöffnet.
+Die optionale Speicherung der Zugangsdaten ist standardmässig ausgeschaltet. Nur nach ausdrücklicher Auswahl wird das Passwort in der Windows-Anmeldeinformationsverwaltung gespeichert; es gibt keinen Klartext-Fallback. Das Frontend erhält daraus kein Passwort. Session-ID und Passwort werden weder in den Cache noch in Protokolle geschrieben. Die Sitzung liegt im Python-Arbeitsspeicher; Abmelden und reguläres Schliessen versuchen `SessionDelete`. TLS-Prüfung bleibt aktiv, Windows-Zertifikate werden über `truststore` genutzt. Zugriffe erfolgen mit den persönlichen Znuny-Berechtigungen; unvollständige Suchergebnisse werden nicht als vollständiger Datenstand übernommen. Ticketlinks enthalten keine Session-ID. Die WebView-Navigation ist auf die lokalen Anwendungsassets begrenzt; Ticketlinks werden im externen Browser geöffnet.
 
 **Echte Znuny-Exporte, Zugangsdaten und Kundendaten dürfen niemals auf GitHub eingecheckt werden.** PDF-Berichte und Cache-Dateien können sensible Inhalte enthalten.
 
@@ -275,10 +275,10 @@ docs/screenshots/        Sichere Aufnahmen der integrierten Oberfläche
 
 ## Bekannte Einschränkungen
 
-- Reale Znuny-Anmeldung, PBX-/PBX-Intern-Abgleich und reale REST-Zeitmessungen sind noch nicht abgenommen.
+- Echte Anmeldung und Live-Datenfunktion sind durch den Benutzer bestätigt. Die dokumentierten Performance-Messungen verwenden synthetische Daten und sind keine neuen Live-Messungen.
 - Installation wurde auf dem Entwicklungsrechner unter separater Testkennung geprüft; frische Windows-Installation und All-Users-Abnahme stehen aus. Die fehlende WebView2-Laufzeit wurde simuliert, nicht vom Rechner entfernt.
 - Browser-Skalierung ersetzt keinen physischen Windows-DPI-Wechsel.
-- Ohne vollständige vergleichbare Monatsdaten gibt es keinen Performance Score. Historische Bestände können nicht nachträglich aus heutigen Tickets rekonstruiert werden.
+- Ohne vollständige vergleichbare Zeiträume und passende Bestands-Snapshots gibt es keinen Performance Score. Historische Bestände können nicht nachträglich aus heutigen Tickets rekonstruiert werden.
 - EXE und Installer sind unsigned; es gibt noch keinen finalen Release und keinen freigegebenen Main-Merge.
 
 ## Drittkomponenten und Lizenz
