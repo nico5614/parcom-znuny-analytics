@@ -65,12 +65,12 @@ def month_label(month: str) -> str:
 def period_label(metadata: FileMetadata) -> str:
     if getattr(metadata, "period_start", None):
         start, end = datetime.fromisoformat(metadata.period_start), datetime.fromisoformat(metadata.period_end)
-        return (f"{start:%d.%m.%Y %H:%M} – {end:%d.%m.%Y %H:%M}" if start.tzinfo
+        return (f"{start:%d.%m.%Y} – {end:%d.%m.%Y}" if start.tzinfo
                 else f"{start:%d.%m.%Y} – {end:%d.%m.%Y}")
     if metadata.reporting_month:
         return month_label(metadata.reporting_month)
     timestamp = datetime.fromisoformat(metadata.export_timestamp)
-    return f"Datenstand: {timestamp:%d.%m.%Y} – {timestamp:%H:%M} Uhr"
+    return f"Datenstand: {timestamp:%d.%m.%Y}"
 
 
 def parse_filename(filename: str) -> FileMetadata:

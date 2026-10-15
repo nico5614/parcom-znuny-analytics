@@ -77,13 +77,14 @@ def test_change_check_does_not_replace_cache(web_data):
 
 def test_periods_are_resolved_in_python_and_reject_invalid_intervals():
     period = resolve_period({"preset": "1W"})
-    assert period.end - period.start == timedelta(days=7)
+    assert (period.end.date() - period.start.date()).days == 6
+    assert period.start.hour == 0
     custom = resolve_period({"preset": None, "start": (now() - timedelta(days=2)).isoformat(), "end": now().isoformat()})
     assert period_dto(custom)["preset"] is None
     with pytest.raises(ValueError):
         resolve_period({"preset": "999J"})
     with pytest.raises(ValueError):
-        resolve_period({"preset": None, "start": now().isoformat(), "end": now().isoformat()})
+        resolve_period({"preset": None, "start": now().isoformat(), "end": (now()-timedelta(days=1)).isoformat()})
 
 
 def test_settings_round_trip_and_existing_qt_settings(tmp_path, qapp):

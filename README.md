@@ -17,7 +17,7 @@
 
 *Integriertes Produktionsfrontend mit anonymen, synthetischen Beispieldaten. Keine echten Kunden- oder Anmeldedaten. Fehlende vergleichbare Datenstände werden bewusst als «–» dargestellt.*
 
-**Version 1.0.0 · Integrationsstand, noch keine Produktionsfreigabe.** EXE und Installer wurden auf dem Entwicklungsrechner geprüft. Die echte Znuny-Anmeldung und Live-Datenfunktion wurden vom Benutzer bestätigt; die native Sichtprüfung ist bestanden. Die abschliessende installierte PDF-Dialogprüfung und finale Release-Prüfungen stehen noch aus. Eine frische Windows-Installation und physische DPI-Wechsel wurden nicht geprüft. Daher sind Main-Merge, Tag und GitHub Release nicht freigegeben. Details: [VALIDATION.md](VALIDATION.md) und [INTEGRATION.md](INTEGRATION.md).
+**Version 1.0.0 · Integrationsstand, noch keine Produktionsfreigabe.** EXE und Installer wurden auf dem Entwicklungsrechner geprüft. Die echte Znuny-Anmeldung und Live-Datenfunktion wurden vom Benutzer bestätigt; die native Sichtprüfung ist bestanden. Der Benutzer hat am 14.10.2026 die PDF-Exporte bestätigt. Die neuen Kalenderanpassungen und die noch offene Überarbeitung des Performance Scores sind noch nicht als Installer veröffentlicht; finale Release-Prüfungen stehen aus. Eine frische Windows-Installation und physische DPI-Wechsel wurden nicht geprüft. Daher sind Main-Merge, Tag und GitHub Release nicht freigegeben. Details: [VALIDATION.md](VALIDATION.md) und [INTEGRATION.md](INTEGRATION.md).
 
 ## Inhaltsverzeichnis
 
@@ -156,7 +156,11 @@ Deinstallation erfolgt über Windows **Installierte Apps**. Lokale Anwendungsdat
 
 ### Zeitraum und Datenstand
 
-Die Timeline bietet **1T / 1W / 1M / 3M / 6M / 1J**, zwei verschiebbare Grenzen und exakte Von-/Bis-Felder. Zulässig sind ein Tag bis ein Kalenderjahr ohne zukünftiges Ende; Anzeigezeitzone ist **Europe/Zurich**. Vordefinierte Zeiträume rücken beim Aktualisieren weiter, ein eigener Zeitraum bleibt fest.
+Die Timeline bietet **1T / 1W / 1M / 3M / 6M / 1J**, zwei verschiebbare Grenzen und den Button **Eigenes Datum auswählen**. Im Kalender zuerst den Starttag und danach den Endtag anklicken; der Bereich wird markiert. **Zeitraum bestätigen** übernimmt die Auswahl, **Auswahl löschen** setzt sie zurück. Der heutige Tag ist markiert. Zulässig sind ein Tag bis ein Kalenderjahr ohne zukünftiges Ende; Anzeigezeitzone ist **Europe/Zurich**. Vordefinierte Zeiträume rücken beim Aktualisieren weiter, ein eigener Zeitraum bleibt fest. **1W** zeigt heute und die sechs vorherigen Kalendertage. Die Tagespunkte reichen jeweils von Mitternacht bis Tagesende; der heutige Tag enthält die bisher verfügbaren Daten. Auch längere Zeiträume bleiben tageweise aufgeschlüsselt. Auswahl und Auswertungsbeschriftungen zeigen das Datum ohne Uhrzeit.
+
+![Kalenderauswahl](docs/screenshots/calendar.png)
+
+Die Auswertung bleibt auf PBX und PBX Intern begrenzt. Znunys Standard-Wochenstatistik hat keinen fest eingebauten PBX-Filter; unterschiedliche Queue- oder Berechtigungsumfänge können deshalb unterschiedliche Zahlen ergeben. Eine zahlenmässige Übereinstimmung mit der konkreten Znuny-Installation wurde noch nicht bestätigt.
 
 Neue und geschlossene Tickets sowie Servicezeiten beziehen sich auf den gewählten Zeitraum; der Vergleich ist gleich lang und unmittelbar vorgelagert. Gemeinsame Zeitraumgrenzen werden nicht doppelt gezählt. Bestandskennzahlen sind als «Stand jetzt» oder historisch als «Stand am …» gekennzeichnet. Historische Werte und Bestandsdeltas erscheinen nur mit exakt erhobenen passenden Snapshots; heutige Tickets ersetzen keinen historischen Bestand. Reaktions- und Lösungszeit zeigen primär den Median, den Durchschnitt ergänzend.
 

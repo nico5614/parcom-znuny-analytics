@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 import time
 from unittest.mock import Mock
 
@@ -43,7 +44,7 @@ def test_live_login_refresh_all_kpis_pdf_failure_reconnect_logout(qapp, tmp_path
     client.login.side_effect, client.logout.side_effect = login, logout
     client.search_tickets.return_value = [str(number) for number in range(1, 7)]
     raw = [{**{key: row.get(column) for key, column in FIELD_MAP.items()}, "TicketID": str(index),
-            "Age": parse_age(row["Alter"]) * 60, "Queue": "PBX", "Created": "2026-10-01 10:00:00", "Closed": "2026-10-02 10:00:00"}
+            "Age": parse_age(row["Alter"]) * 60, "Queue": "PBX", "Created": (datetime.now(timezone.utc)-timedelta(days=2)).strftime("%Y-%m-%d %H:%M:%S"), "Closed": (datetime.now(timezone.utc)-timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")}
            for index, row in enumerate(tickets.to_dict("records"), 1)]
     client.get_tickets.return_value = raw
     client.get_history.return_value = []

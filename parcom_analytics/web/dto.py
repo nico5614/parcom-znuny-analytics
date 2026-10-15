@@ -21,8 +21,8 @@ TYPES = ("Unclassified", "Störung", "Auftrag", "Reparatur", "Abklärung", "Wart
 
 def period_dto(period, preset=None):
     return {"start": period.start.isoformat(), "end": period.end.isoformat(), "label": period.label,
-            "startInput": period.start.astimezone(ZURICH).strftime("%Y-%m-%dT%H:%M"),
-            "endInput": period.end.astimezone(ZURICH).strftime("%Y-%m-%dT%H:%M"),
+            "startInput": period.start.astimezone(ZURICH).strftime("%Y-%m-%d"),
+            "endInput": period.end.astimezone(ZURICH).strftime("%Y-%m-%d"),
             "preset": preset, "presets": list(PRESETS)}
 
 
@@ -34,11 +34,10 @@ def resolve_period(selection):
         if key not in PRESETS:
             raise ValueError("Ungültiger Standardzeitraum.")
         return TimeRange.preset(key)
-    values = []
-    for name in ("start", "end"):
-        value = datetime.fromisoformat(selection[name])
-        values.append((value if value.tzinfo else value.replace(tzinfo=ZURICH)).astimezone(ZURICH))
-    return TimeRange(*values)
+    return TimeRange.dates(
+        datetime.fromisoformat(selection["start"]).date(),
+        datetime.fromisoformat(selection["end"]).date(),
+    )
 
 
 def metric(name, value, note="", tone="default"):

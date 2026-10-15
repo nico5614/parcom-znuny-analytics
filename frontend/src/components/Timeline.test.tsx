@@ -3,6 +3,9 @@ import { describe, it, expect, vi } from 'vitest'
 import { Timeline } from './Timeline'
 import type { DesktopApi, Period } from '../types/bridge'
 
+HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
+HTMLDialogElement.prototype.close = function () { this.removeAttribute('open') }
+
 const period: Period = { start: '2026-10-01T12:00:00+02:00', end: '2026-10-08T12:00:00+02:00', startInput: '2026-10-01T12:00', endInput: '2026-10-08T12:00', label: 'Python-Zeitraum', preset: '1W', presets: ['1J', '6M', '3M', '1M', '1W', '1T'] }
 describe('Python-owned timeline', () => {
   it('has two keyboard handles and uses the resolved Python interval', async () => {
@@ -19,10 +22,12 @@ describe('Python-owned timeline', () => {
     const resolvePeriod = vi.fn().mockResolvedValue({ ok: false, error: { kind: 'validation', message: 'Mindestens ein Tag ist erforderlich.' } })
     const onChange = vi.fn()
     render(<Timeline api={{ resolvePeriod } as unknown as DesktopApi} period={period} onChange={onChange} />)
-    fireEvent.change(screen.getByLabelText('Von'), { target: { value: '2026-10-08T10:00' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Anwenden' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Eigenes Datum auswählen' }))
+    fireEvent.click(screen.getByRole('button', { name: '2026-10-01' }))
+    fireEvent.click(screen.getByRole('button', { name: '2026-10-08' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Zeitraum bestätigen' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Mindestens ein Tag')
-    expect(resolvePeriod).toHaveBeenCalledWith({ preset: null, start: '2026-10-08T10:00', end: period.endInput })
+    expect(resolvePeriod).toHaveBeenCalledWith({ preset: null, start: '2026-10-01', end: '2026-10-08' })
     expect(onChange).not.toHaveBeenCalled()
   })
   it('custom mode spans the full track and the next handle action returns to snap mode', async () => {
@@ -30,7 +35,7 @@ describe('Python-owned timeline', () => {
     const onChange = vi.fn()
     const { container } = render(<Timeline api={{ resolvePeriod } as unknown as DesktopApi} period={{ ...period, preset: null }} onChange={onChange} />)
     expect((container.querySelector('.timeline-selected') as HTMLElement).style.left).toBe('0%')
-    expect(container.querySelector('.custom-labels')).toHaveTextContent('2026-10-01 12:00')
+    expect(container.querySelector('.custom-labels')).toHaveTextContent('2026-10-01')
     fireEvent.keyDown(screen.getByRole('slider', { name: 'Zeitraum-Beginn' }), { key: 'Home' })
     await waitFor(() => expect(resolvePeriod).toHaveBeenCalledWith({ preset: '1J' }))
   })

@@ -371,3 +371,13 @@ tr.attention td:first-child { border-left: 2px solid #ffb84d; }
 .analysis-details .table-scroll, .agents-details .table-scroll { max-height: 440px; }
 .analysis-details thead, .agents-details thead { position: sticky; top: 0; z-index: 1; background: var(--surface); }
 .maximum td { font-weight: 650; color: var(--text); }
+
+.date-range-dialog { width: min(460px, 95vw); }
+.calendar-heading { display: flex; justify-content: space-between; align-items: center; margin: 20px 0; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
+.calendar-grid button { padding: 12px 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: inherit; }
+.calendar-grid button[aria-current="date"] { border-color: #ed791f; }
+.calendar-grid button.calendar-endpoint { background: #ed791f; color: white; font-weight: 700; }
+.calendar-grid button.calendar-between { background: #ed791f26; }
+.calendar-grid button:disabled { opacity: .3; }
+.calendar-grid button:focus-visible { outline: 2px solid #ed791f; }

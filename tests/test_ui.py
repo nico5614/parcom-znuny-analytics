@@ -61,7 +61,7 @@ def test_complete_desktop_workflow(qapp, tmp_path, tickets, monkeypatch):
         assert window.month_combo.isVisible() == (kpi in {1, 2, 5, 6})
         assert len(window.figure.axes) == 1
         assert window.detail_table.model().rowCount() == (3 if kpi == 4 else 6)
-        assert "August 2026" in window.current_period if kpi in {1, 2, 5, 6} else "29.09.2026 – 10:52 Uhr" in window.current_period
+        assert "August 2026" in window.current_period if kpi in {1, 2, 5, 6} else "29.09.2026" in window.current_period
     window.resize(1050, 650)
     qapp.processEvents()
     assert window.size() == QSize(1050, 650)
@@ -153,7 +153,7 @@ def test_pdf_contains_all_rows_and_repeats_table_headers(qapp, tmp_path, tickets
     data = pd.concat([tickets] * 35, ignore_index=True)
     data["Ticket#"] = [f"SYNTHETIC-{number:04}" for number in range(len(data))]
     analysis = analyze(7, data)
-    window._render_analysis(analysis, "Datenstand: 29.09.2026 – 10:52 Uhr")
+    window._render_analysis(analysis, "Datenstand: 29.09.2026")
     pdf = tmp_path / "multipage.pdf"
     export_pdf(pdf, analysis, window.current_period, window.figure)
     document = QPdfDocument()

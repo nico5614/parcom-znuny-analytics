@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState, type PointerEvent, type KeyboardEvent } from 'react'
+import { DateRangeDialog } from './DateRangeDialog'
 import type { DesktopApi, Period, PeriodSelection } from '../types/bridge'
 
 export function selection(period: Period): PeriodSelection { return period.preset ? { preset: period.preset } : { preset: null, start: period.start, end: period.end } }
 export function Timeline({ api, period, onChange }: { api: DesktopApi; period: Period; onChange: (period: Period) => void }) {
-  const [start, setStart] = useState(period.startInput)
-  const [end, setEnd] = useState(period.endInput)
+  const [calendar, setCalendar] = useState(false)
   const [error, setError] = useState('')
   const [draft, setDraft] = useState<string | null>(null)
   const track = useRef<HTMLDivElement>(null)
   const drag = useRef<{ x: number; key: string | null; moved: boolean } | null>(null)
   const request = useRef(0)
-  useEffect(() => { setStart(period.startInput); setEnd(period.endInput); setDraft(null) }, [period])
+  useEffect(() => { setDraft(null) }, [period])
   async function resolve(value: PeriodSelection) {
     const current = ++request.current
     try {
@@ -54,9 +54,11 @@ export function Timeline({ api, period, onChange }: { api: DesktopApi; period: P
     <div className="timeline-track-wrap"><div className="timeline-track" ref={track}>
       <div className="timeline-selected" style={{ left: `${left}%` }} />
       {[left, 100].map((position, i) => <button key={i} className="timeline-handle" style={{ left: `${position}%` }} role="slider" aria-label={i ? 'Zeitraum-Ende' : 'Zeitraum-Beginn'} aria-valuemin={0} aria-valuemax={5} aria-valuenow={custom ? 0 : period.presets.indexOf(key!)} aria-valuetext={custom ? period.label : key!} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { drag.current = null; setDraft(null) }} onKeyDown={keyboard}><span /></button>)}
-      <div className={`timeline-labels ${custom ? 'custom-labels' : ''}`}>{custom ? <><span>{period.startInput.replace('T', ' ')}</span><span>{period.endInput.replace('T', ' ')}</span></> : <>{period.presets.map((preset, i) => <button key={preset} className={key === preset ? 'selected' : ''} style={{ left: `${i / 6 * 100}%` }} onClick={() => void resolve({ preset })}>{preset}</button>)}<span className="now-label">Jetzt</span></>}</div>
+      <div className={`timeline-labels ${custom ? 'custom-labels' : ''}`}>{custom ? <><span>{period.startInput.slice(0, 10)}</span><span>{period.endInput.slice(0, 10)}</span></> : <>{period.presets.map((preset, i) => <button key={preset} className={key === preset ? 'selected' : ''} style={{ left: `${i / 6 * 100}%` }} onClick={() => void resolve({ preset })}>{preset}</button>)}<span className="now-label">Jetzt</span></>}</div>
     </div></div>
-    <form className="custom-range" onSubmit={event => { event.preventDefault(); void resolve({ preset: null, start, end }) }}><label>Von<input type="datetime-local" value={start} onChange={event => setStart(event.target.value)} required /></label><label>Bis<input type="datetime-local" value={end} onChange={event => setEnd(event.target.value)} required /></label><button className="secondary" type="submit">Anwenden</button></form>
+    <button className="secondary" onClick={() => setCalendar(true)}>Eigenes Datum auswählen</button>
+    {calendar && <DateRangeDialog start={period.startInput} end={period.endInput} onClose={() => setCalendar(false)} onConfirm={(start, end) => { setCalendar(false); void resolve({ preset: null, start, end }) }} />}
+
     {error && <p role="alert" className="timeline-error">{error}</p>}
   </div>
 }

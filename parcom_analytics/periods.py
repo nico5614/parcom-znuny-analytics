@@ -29,23 +29,35 @@ class TimeRange:
     def __post_init__(self):
         if self.start.tzinfo is None or self.end.tzinfo is None:
             raise DataError("Der Zeitraum benötigt eine Zeitzone.")
-        if self.end - self.start < timedelta(days=1):
+        if self.end <= self.start:
             raise DataError("Bitte wählen Sie einen Zeitraum von mindestens einem Tag.")
-        if self.start < months_before(self.end, 12):
+        if self.start.date() < months_before(self.end, 12).date():
             raise DataError("Bitte wählen Sie einen Zeitraum von höchstens einem Jahr.")
         if self.end > now() + timedelta(seconds=2):
             raise DataError("Das Bis-Datum darf nicht in der Zukunft liegen.")
 
     @property
     def label(self):
-        return f"{self.start:%d.%m.%Y %H:%M} – {self.end:%d.%m.%Y %H:%M}"
+        return f"{self.start:%d.%m.%Y} – {self.end:%d.%m.%Y}"
 
     @classmethod
     def preset(cls, key="1W", end=None):
         end = end or now()
-        start = (end - timedelta(days=1 if key == "1T" else 7) if key in {"1T", "1W"}
-                 else months_before(end, 12 if key == "1J" else int(key[:-1])))
+        midnight = end.replace(hour=0, minute=0, second=0, microsecond=0)
+        start = (midnight - timedelta(days=0 if key == "1T" else 6) if key in {"1T", "1W"}
+                 else months_before(midnight, 12 if key == "1J" else int(key[:-1])))
         return cls(start, end)
+
+    @classmethod
+    def dates(cls, start, end):
+        """Inclusive selected dates, with today's incomplete day ending at the live clock."""
+        current = now()
+        first = datetime.combine(start, datetime.min.time(), ZURICH)
+        last = datetime.combine(end, datetime.max.time().replace(microsecond=0), ZURICH)
+        if end > current.date():
+            raise DataError("Das Bis-Datum darf nicht in der Zukunft liegen.")
+        return cls(first, min(last, current))
+
 
     @property
     def previous(self):
@@ -55,19 +67,11 @@ class TimeRange:
         return (end - duration).astimezone(ZURICH), self.start
 
     def buckets(self):
-        duration = self.end - self.start
-        if duration <= timedelta(days=1):
-            step = timedelta(hours=2)
-        elif duration <= timedelta(days=32):
-            step = timedelta(days=1)
-        else:
-            edges = [self.end]
-            count = 1
-            while months_before(self.end, count) > self.start:
-                edges.append(months_before(self.end, count))
-                count += 1
-            return [self.start, *reversed(edges)]
+        # Calendar days in Zurich; never label a noon-to-noon bucket as a day.
         edges = [self.start]
-        while edges[-1] + step < self.end:
-            edges.append(edges[-1] + step)
+        midnight = self.start.replace(hour=0, minute=0, second=0, microsecond=0)
+        boundary = midnight + timedelta(days=1)
+        while boundary < self.end:
+            edges.append(boundary)
+            boundary += timedelta(days=1)
         return [*edges, self.end]

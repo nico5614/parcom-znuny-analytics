@@ -29,7 +29,7 @@ def test_live_scope_custom_closed_states_waiting_escalation_and_comparison(tmp_p
     assert len(batch.frames[3])==2
     assert len(batch.previous[1])==1
     assert client.search_tickets.call_args_list[4].args[0]["TicketEscalationTimeOlderMinutes"]==1
-    assert client.search_tickets.call_args_list[0].args[0]["TicketCreateTimeNewerDate"]=="2026-09-29 12:00:00"
+    assert client.search_tickets.call_args_list[0].args[0]["TicketCreateTimeNewerDate"]=="2026-09-29 22:00:00"
     result=analyze_live(4,batch.frames[4],period)
     assert result.chart.to_dict()=={"Eskaliert":1,"Nicht eskaliert":1}
     assert result.details.iloc[0]["Typ"]=="Unclassified"
@@ -56,5 +56,7 @@ def test_rolling_buckets_are_distinct_and_preserve_zero_days():
     period=TimeRange.preset("3M",end)
     frame=normalize_tickets([{"Created":"2026-07-07 10:00:00"}, {"Created":"2026-09-07 10:00:00"}])
     series=period_series(frame,1,period)
-    assert series.tolist()==[1,0,1] and len(set(series.index))==3
-    assert series.index.tolist()==["06.07.–06.08.","06.08.–06.09.","06.09.–06.10."]
+    assert series.sum() == 2 and len(series) == 93
+    assert series["07.07."] == series["07.09."] == 1
+    assert (series == 0).sum() == 91
+    assert series.index[0] == "06.07." and series.index[-1] == "06.10."

@@ -57,7 +57,7 @@ def metrics_html(items: list[tuple[str, str]], columns: int = 4) -> str:
 
 
 def document_header(title: str, period: str = "") -> str:
-    generated = datetime.now().astimezone().strftime("%d.%m.%Y – %H:%M Uhr (%Z)")
+    generated = datetime.now().astimezone().strftime("%d.%m.%Y")
     return ('<style>h1{font-size:19pt;color:#29343e}h2{font-size:12pt;color:#29343e}'
             'p{color:#52616b}th,td{padding:5px}table{border-collapse:collapse}</style>'
             f'<p style="color:#e87926"><b>{APP_NAME}</b></p><h1>{escape(title)}</h1>'
@@ -70,7 +70,7 @@ def export_pdf(path: Path, analysis: Analysis, period: str, figure: Figure, repo
     title = KPI_TITLES[analysis.kpi].split(" – ",1)[-1]
     body = document_header(title, period)
     if report:
-        stamp = datetime.fromisoformat(report.record.export_timestamp).strftime("%d.%m.%Y – %H:%M Uhr")
+        stamp = datetime.fromisoformat(report.record.export_timestamp).strftime("%d.%m.%Y")
         body += f'<p>Datenquelle: {escape(report.source)} · Datenstand: {stamp} ({escape(report.record.timezone)})</p>'
     body += metrics_html(metric_items(analysis)) + add_chart(document, figure, "current")
     body += f'<p>{escape(analysis.note)}</p>'
@@ -104,7 +104,7 @@ def export_management_pdf(path: Path, report: ManagementReport) -> None:
     title = "Service Desk – Gesamtübersicht"
     body = document_header(title, period_label(report.kpis[1].record))
     stamp = max(item.record.export_timestamp for item in report.kpis.values())
-    body += f'<p>Datenquelle: {escape(report.kpis[1].source)} · Datenstand: {datetime.fromisoformat(stamp):%d.%m.%Y %H:%M} · Europe/Zurich</p>'
+    body += f'<p>Datenquelle: {escape(report.kpis[1].source)} · Datenstand: {datetime.fromisoformat(stamp):%d.%m.%Y} · Europe/Zurich</p>'
     performance, score = report.performance, report.performance.current
     if score:
         status, color = score_status(score.value)
@@ -122,14 +122,14 @@ def export_management_pdf(path: Path, report: ManagementReport) -> None:
     draw_management(summary, report)
     body += add_chart(document, summary, "management", 480)
     body += '<h2 style="page-break-before:always">Datenbasis und Performance</h2>'
-    sources = [[KPI_TITLES[kpi].split(" – ",1)[-1], period_label(item.record), datetime.fromisoformat(item.record.export_timestamp).strftime("%d.%m.%Y %H:%M"), item.record.timezone, item.source]
+    sources = [[KPI_TITLES[kpi].split(" – ",1)[-1], period_label(item.record), datetime.fromisoformat(item.record.export_timestamp).strftime("%d.%m.%Y"), item.record.timezone, item.source]
                for kpi, item in report.kpis.items()]
     body += table_html(pd.DataFrame(sources, columns=["KPI", "Berichtszeitraum / Datenstand", "Exportzeitpunkt", "Zeitzone", "Datenquelle"]))
     body += '<p>Monats-KPIs und Snapshots können unterschiedliche Zeitbezüge haben. Abschlussverhältnis und Ticketdifferenz werden nur für denselben Berichtsmonat berechnet.</p>'
     if score:
         if score.current.period_start:
-            selected = f'{datetime.fromisoformat(score.current.period_start):%d.%m.%Y %H:%M} – {datetime.fromisoformat(score.current.period_end):%d.%m.%Y %H:%M}'
-            previous = f'{datetime.fromisoformat(score.previous.period_start):%d.%m.%Y %H:%M} – {datetime.fromisoformat(score.previous.period_end):%d.%m.%Y %H:%M}'
+            selected = f'{datetime.fromisoformat(score.current.period_start):%d.%m.%Y} – {datetime.fromisoformat(score.current.period_end):%d.%m.%Y}'
+            previous = f'{datetime.fromisoformat(score.previous.period_start):%d.%m.%Y} – {datetime.fromisoformat(score.previous.period_end):%d.%m.%Y}'
             body += f'<p>Score: ausgewählter Zeitraum {selected} · Vergleich: {previous}. '
         else:
             body += f'<p>Score: Exportmonat {month_label(score.current.month)} · Vergleich: {month_label(score.previous.month)}. '

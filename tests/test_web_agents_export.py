@@ -62,7 +62,7 @@ def test_custom_period_stays_exact_after_a_cached_restart(bridge):
     assert bridge.refresh(selection)["ok"]
     restored = DesktopBridge(root=bridge._root)
     assert restored.getPeriod()["preset"] is None
-    assert restored.getPeriod()["start"] == selection["start"]
+    assert restored.getPeriod()["startInput"] == selection["start"][:10]
     assert restored.getPeriod()["end"] == selection["end"]
 
 

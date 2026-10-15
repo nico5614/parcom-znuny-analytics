@@ -26,12 +26,7 @@ def period_series(frame, kpi, period):
     counts, labels = [], []
     for index, (start, end) in enumerate(zip(edges, edges[1:])):
         counts.append(sum(stamp is not None and (start <= stamp < end or (index == len(edges) - 2 and stamp == end)) for stamp in stamps))
-        if (period.end-period.start).days <= 1:
-            labels.append(start.strftime("%d.%m. %H:%M"))
-        elif (period.end-period.start).days <= 32:
-            labels.append(start.strftime("%d.%m."))
-        else:
-            labels.append(f"{start:%d.%m.}–{end:%d.%m.}")
+        labels.append(start.strftime("%d.%m."))
     return pd.Series(counts, index=labels, dtype=int)
 
 

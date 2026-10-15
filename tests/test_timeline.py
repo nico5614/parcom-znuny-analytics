@@ -17,11 +17,11 @@ def test_exact_periods_buckets_and_previous_at_month_end():
         assert period.buckets()[0] == period.start
         assert period.buckets()[-1] == end
     period = TimeRange.preset("3M", end)
-    assert [p.month for p in period.buckets()] == [7, 8, 9, 10]
-    assert all(p.day == 6 and p.hour == 14 for p in period.buckets())
+    assert len(period.buckets()) == 94
+    assert all(p.hour == 0 for p in period.buckets()[:-1])
     assert TimeRange.preset("1M", datetime(2026, 3, 31, tzinfo=ZURICH)).start.day == 28
     with pytest.raises(DataError):
-        TimeRange(end - timedelta(hours=23), end)
+        TimeRange(end, end)
     with pytest.raises(DataError):
         TimeRange(end - timedelta(days=367), end)
 

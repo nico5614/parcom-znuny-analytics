@@ -57,7 +57,7 @@ def snapshot_context(batch):
         loaded = datetime.fromisoformat(batch.load_started_at or batch.captured_at)
         is_now = abs((loaded.astimezone(timezone.utc) - end.astimezone(timezone.utc)).total_seconds()) <= 2
     return {"snapshotAt": end.isoformat(), "snapshotIsNow": is_now,
-            "contextLabel": "Stand jetzt" if is_now else f"Stand am {end.astimezone(ZURICH):%d.%m.%Y %H:%M}"}
+            "contextLabel": "Stand jetzt" if is_now else f"Stand am {end.astimezone(ZURICH):%d.%m.%Y}"}
 
 
 def snapshot_analysis(cache, kpi, endpoint):
