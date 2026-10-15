@@ -151,9 +151,9 @@ def interval_key(start, end):
 
 
 def selected_report(cache):
-    """Same seven components/five area weights, applied to exact selected bounds."""
+    """Prefer the full comparison; disclose a live timing-only score when stock is missing."""
     from .live_cache import restore_analysis
-    from .service_desk import Period, Report, fill_period, score_period
+    from .service_desk import Period, Report, Score, METRICS, fill_period, score_period, trend_score
     batch, period = cache.batch, cache.batch.period
     if not isinstance(period, TimeRange):
         return cache.performance()
@@ -179,8 +179,39 @@ def selected_report(cache):
     older = inputs(older_start, previous_start)
     score = score_period(current, previous) if not current.issue and not previous.issue else None
     old_score = score_period(previous, older) if not previous.issue and not older.issue else None
+    if score is None:
+        # Live interval measurements are already fetched for both periods. Never
+        # substitute today's stock for an unobserved historical endpoint.
+        components, areas = {}, {}
+        for kpi, key in ((5, "response"), (6, "solution")):
+            column = "Erstantwortzeit in Minuten" if kpi == 5 else "Lösungszeit in Minuten"
+            before_frame = batch.previous.get(kpi)
+            after_frame = batch.frames.get(kpi)
+            before = durations(before_frame, column)["median"] if before_frame is not None else None
+            after = durations(after_frame, column)["median"] if after_frame is not None else None
+            if number(before) is None or number(after) is None or before < 0 or after < 0:
+                continue
+            previous.values[key], current.values[key] = before, after
+            components[key] = max(1.0, trend_score(before, after))
+            areas[METRICS[key][0]] = components[key]
+        if areas:
+            score = Score(current, previous, components, areas, round(sum(areas.values()) / len(areas), 1))
+    for point in (score, old_score):
+        if point:
+            point.components = {key: max(1.0, value) for key, value in point.components.items()}
+            for area in point.areas:
+                members = [value for key, value in point.components.items() if METRICS[key][0] == area]
+                point.areas[area] = sum(members) / len(members)
+            point.value = round(sum(point.areas.values()) / len(point.areas), 1)
+    if old_score and (not score or set(old_score.areas) != set(score.areas)):
+        old_score = None
+    missing = [area for area in dict.fromkeys(spec[0] for spec in METRICS.values())
+               if not score or area not in score.areas]
+    issue = (f"Teilbewertung: {len(score.areas)} von 5 Bereichen, gleich gewichtet. "
+             + "Nicht berücksichtigt (Vergleichsdaten fehlen): " + ", ".join(missing) + ".") if score and missing else (
+             "Keine vergleichbaren Reaktions- oder Lösungszeiten in beiden Zeiträumen vorhanden." if not score else "")
     return Report([older, previous, current], [item for item in (old_score, score) if item],
-                  (current.issue or previous.issue) if not score else "")
+                  issue)
 
 
 def selected_performance(cache):
@@ -194,6 +225,8 @@ def selected_performance(cache):
                    "areas": score.areas if score else {}, "components": [], "history": []})
     if score:
         for key, (area, label, unit) in METRICS.items():
+            if key not in score.components:
+                continue
             result["components"].append({"key": key, "area": area, "label": label, "unit": unit,
                                          "before": score.previous.values[key], "after": score.current.values[key],
                                          "score": score.components[key]})

@@ -137,10 +137,11 @@ def export_management_pdf(path: Path, report: ManagementReport) -> None:
             delta = score.value-performance.previous_score.value
             body += f'{"Vorheriger Zeitraum" if score.current.period_start else "Vormonat"}: {format_value(performance.previous_score.value)} % · Veränderung: {"+" if delta > 0 else ""}{format_value(delta)} Prozentpunkte.'
         body += '</p>'
-        body += table_html(pd.DataFrame([[name, f"{format_value(float(value))} %", "20 %"] for name, value in score.areas.items()],
+        body += f"<p>{escape(performance.issue)}</p>"
+        body += table_html(pd.DataFrame([[name, f"{format_value(float(value))} %", f"{format_value(100 / len(score.areas))} %"] for name, value in score.areas.items()],
                                        columns=["Teilbereich", "Score", "Gewicht"]))
         body += '<p>Teilscore: 100 %, wenn aktuell ≤ vorher, sonst 100 × vorher / aktuell. Backlog und wartende Tickets: jeweils Mittel aus Anzahl und Anteil über 30 Tage. '
-        body += 'Eskalationen: Quote; Zeiten: Median. Gesamtscore: Mittel der fünf Bereiche. Verbesserungen sind bei 100 % gedeckelt.</p>'
+        body += 'Eskalationen: Quote; Zeiten: Median. Gesamtscore: Mittel der berücksichtigten Bereiche. Teilbewertungen berücksichtigen nur verfügbare Vergleichsdaten. Verbesserungen sind bei 100 % gedeckelt.</p>'
     for position, (kpi, item) in enumerate(report.kpis.items()):
         page_break = ' style="page-break-before:always"' if position % 2 == 0 else ''
         body += f'<h2{page_break}>{escape(KPI_TITLES[kpi].split(" – ",1)[-1])} · Verlauf</h2>'

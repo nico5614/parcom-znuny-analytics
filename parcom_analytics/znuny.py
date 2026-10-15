@@ -46,6 +46,7 @@ class ZnunyClient:
     def __init__(self, transport=None, concurrency=4):
         if type(concurrency) is not int or not 1 <= concurrency <= 4:
             raise ValueError("Concurrency must be between 1 and 4")
+        self.queues = DEFAULT_QUEUES
         self.concurrency = concurrency
         self._lock = RLock()
         self._refresh_lock = RLock()
@@ -204,7 +205,7 @@ class ZnunyClient:
             self._history_revision.clear()
 
     def search_tickets(self, filters=None, limit=SEARCH_LIMIT):
-        payload = self._request("TicketSearch", data={**(filters or {}), **self._auth(), "Queues": list(DEFAULT_QUEUES),
+        payload = self._request("TicketSearch", data={**(filters or {}), **self._auth(), **({"Queues": list(self.queues)} if self.queues is not None else {}),
                                 "Limit": limit})
         ids = payload.get("TicketIDs", payload.get("TicketID", []))
         if ids is None:

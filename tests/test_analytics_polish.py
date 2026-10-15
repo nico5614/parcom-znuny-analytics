@@ -154,15 +154,15 @@ def test_selected_score_uses_original_weights_and_comparison(tmp_path, qapp):
     # A valid previous score in the same month is never mistaken for a missing current score.
     restored.batch.frames[5].loc[0, "Erstantwortzeit in Minuten"] = None
     restored.update(restored.batch)
-    assert restored.performance().current is None
-    assert restored.selected_performance()["value"] is None
+    assert restored.performance().current is not None
+    assert restored.selected_performance()["value"] == 100
 
 
-def test_score_missing_start_never_reweights_or_falls_back_to_calendar(cache):
+def test_score_missing_start_uses_disclosed_live_time_comparison(cache):
     score = cache.selected_performance()
-    assert score["value"] is None and score["previous"] is None
-    assert not score["deltaAvailable"] and score["components"] == []
-    assert "exakte Bestands-Snapshots" in score["issue"]
+    assert score["value"] == 100 and score["previous"] is None
+    assert not score["deltaAvailable"] and len(score["components"]) == 2
+    assert "2 von 5" in score["issue"] and "Eskalationen" in score["issue"]
 
 
 def test_score_zero_is_valid_and_invalid_duration_blocks_score(tmp_path):
@@ -180,7 +180,7 @@ def test_score_zero_is_valid_and_invalid_duration_blocks_score(tmp_path):
     assert cache.selected_performance()["value"] == 100
     cache.batch.frames[5].loc[0, "Erstantwortzeit in Minuten"] = None
     cache.update(cache.batch)
-    assert cache.selected_performance()["value"] is None
+    assert cache.selected_performance()["value"] == 100
 
 
 def test_open_and_waiting_old_stock_are_distinct(cache):

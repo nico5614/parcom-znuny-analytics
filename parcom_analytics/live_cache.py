@@ -97,6 +97,7 @@ class LiveCache:
                 self.batch = LiveBatch(period, current["captured_at"], frames, previous, current.get("agents", []), current.get("note", ""), current.get("identities", []), current.get("load_started_at", ""))
                 self.batch.history_loaded = current.get("history_loaded", True)
                 self.batch.snapshot_is_now = current.get("snapshot_is_now")
+                self.batch.queues = tuple(current["queues"]) if current.get("queues") is not None else (None if "queues" in current else ("PBX", "PBX Intern"))
                 self.history, self.periods = payload["history"], payload["periods"]
                 self.observations = payload.get("observations", {})
                 self.intervals = payload.get("intervals", {})
@@ -114,6 +115,8 @@ class LiveCache:
         history, periods = dict(self.history), dict(self.periods)
         observations = dict(self.observations)
         intervals = dict(self.intervals)
+        if self.batch and self.batch.queues != batch.queues:
+            history, periods, observations, intervals = {}, {}, {}, {}
         if isinstance(batch.period, TimeRange):
             from .comparisons import interval_key
             intervals[interval_key(batch.period.start, batch.period.end)] = {
@@ -160,7 +163,7 @@ class LiveCache:
                                           "previous": {kpi: frame.reindex(columns=NORMALIZED_COLUMNS).astype(object).where(pd.notna(frame), None).to_dict("records") for kpi, frame in batch.previous.items()},
                                           "agents": batch.agents, "note": batch.note, "identities":batch.identities,
                                           "load_started_at":batch.load_started_at, "history_loaded":batch.history_loaded,
-                                          "snapshot_is_now":batch.snapshot_is_now},
+                                          "snapshot_is_now":batch.snapshot_is_now, "queues":batch.queues},
                               "history": history, "periods": periods, "observations": observations,
                               "intervals": intervals})
         candidate = copy(self)
@@ -236,7 +239,7 @@ class LiveCache:
                 if old:
                     history.insert(0, HistoryPoint(replace(record, export_timestamp=batch.period.start.isoformat()), old))
                 note = context["contextLabel"] + ". Delta nur mit exaktem Start-Snapshot."
-            reports[kpi] = KpiReport(record, analysis, history, note, "Znuny Live · lokal gespeicherter Datenstand",
+            reports[kpi] = KpiReport(record, analysis, history, note, "Znuny Live · " + (", ".join(batch.queues) if batch.queues else "Alle berechtigten Queues"),
                                      comparable=old is not None if isinstance(batch.period, TimeRange) and kpi in {3, 4, 7} else kpi in batch.previous or not monthly or single_month)
         self._reports = reports
         return reports

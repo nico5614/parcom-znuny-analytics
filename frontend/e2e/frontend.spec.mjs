@@ -199,3 +199,20 @@ test('login errors, custom interval, handle snap, cached refresh and pending nav
   await expect(page.getByRole('alert')).toContainText('Sitzung ist abgelaufen')
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0)
 })
+
+
+test('queue scope applies to refresh and survives failed selection', async ({ page }) => {
+  await setup(page); await login(page)
+  const queue = page.getByRole('combobox', { name: 'Queue auswählen' })
+  await expect(queue).toHaveValue(JSON.stringify(['PBX', 'PBX Intern']))
+  await queue.selectOption('*')
+  await expect(queue).toHaveValue('*')
+  await queue.selectOption(JSON.stringify(['Video']))
+  await expect(queue).toHaveValue(JSON.stringify(['Video']))
+  const args = await page.evaluate(() => window.validation.calls.filter(call => call.name === 'refresh').at(-1).args[0])
+  expect(args.queues).toEqual(['Video'])
+  await page.evaluate(() => { window.validation.failRefresh = true })
+  await queue.selectOption('*')
+  await expect(page.getByRole('alert')).toBeVisible()
+  await expect(queue).toHaveValue(JSON.stringify(['Video']))
+})

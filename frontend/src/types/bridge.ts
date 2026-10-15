@@ -40,9 +40,9 @@ export interface DesktopApi {
   confirmProbe(sequence: number): Promise<boolean>
 }
 export interface Preferences { theme: 'dark' | 'light'; reducedMotion: boolean }
-export interface DataState { connection: 'online' | 'cached' | 'offline'; busy: boolean; newData: boolean; revision: number; capturedAt: string | null; hasCache: boolean; warning: string; lastSuccessfulConnection?: string | null }
+export interface DataState { queues?: string[] | null; availableQueues?: string[]; connection: 'online' | 'cached' | 'offline'; busy: boolean; newData: boolean; revision: number; capturedAt: string | null; hasCache: boolean; warning: string; lastSuccessfulConnection?: string | null }
 export interface Period { start: string; end: string; startInput: string; endInput: string; label: string; preset: string | null; presets: string[] }
-export type PeriodSelection = { preset: string } | { preset: null; start: string; end: string }
+export type PeriodSelection = ({ preset: string } | { preset: null; start: string; end: string }) & { queues?: string[] | null }
 export interface Comparison {
   value?: number | null; numericValue?: number | null; previous?: number | null
   delta?: number | null; deltaPercent?: number | null; deltaAvailable?: boolean

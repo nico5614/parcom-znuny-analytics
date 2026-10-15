@@ -127,6 +127,8 @@ class DesktopBridge:
                     "busy": self._busy, "newData": self._changes, "revision": self._revision,
                     "capturedAt": self._cache.batch.captured_at if self._cache.batch else None,
                     "hasCache": self._cache.batch is not None, "warning": self._cache.warning,
+                    "queues": list(self._cache.batch.queues) if self._cache.batch and self._cache.batch.queues is not None else (None if self._cache.batch else ["PBX", "PBX Intern"]),
+                    "availableQueues": sorted(set(["PBX", "PBX Intern", *self._settings.get("known_queues", [])])),
                     "lastSuccessfulConnection": self._last_successful_connection or (self._cache.batch.captured_at if self._cache.batch else None)}
 
     def getState(self):
@@ -236,6 +238,7 @@ class DesktopBridge:
             self._cancel.clear()
             lock = self._client._refresh_lock if isinstance(self._client, ZnunyClient) else nullcontext()
             with lock:
+                self._client.queues = batch.queues
                 if batch._state is None:
                     batch = fetch_live(self._client, batch.period, self._cancel, commit=False)
                 batch = load_history(self._client, batch, self._cancel)
@@ -271,7 +274,7 @@ class DesktopBridge:
         matches = [item["id"] for item in registry.values() if item["login"] and item["login"] == key]
         if len(matches) == 1:
             return matches[0]
-        raise ValueError("Unbekannter PBX-Techniker.")
+        raise ValueError("Unbekannter Techniker.")
 
     def getAgentOverride(self, agent_key):
         return self._read(lambda: self._settings.get("agent_overrides", {}).get(self._agent_key(agent_key), {}))
@@ -357,15 +360,28 @@ class DesktopBridge:
         self._busy = True
         try:
             period = resolve_period(selection)
+            from ..znuny import DEFAULT_QUEUES
+            old_queues = getattr(self._client, "queues", DEFAULT_QUEUES)
+            requested = selection.get("queues", self._cache.batch.queues if self._cache.batch else DEFAULT_QUEUES)
+            if requested is not None and (not isinstance(requested, (list, tuple)) or not requested or
+                    any(not isinstance(item, str) or not item.strip() or len(item) > 200 for item in requested)):
+                raise ValueError("Bitte mindestens eine gültige Queue auswählen.")
+            self._client.queues = tuple(dict.fromkeys(requested)) if requested is not None else None
+            if isinstance(self._client, ZnunyClient) and old_queues != self._client.queues:
+                self._client._live_state = None
             lock = self._client._refresh_lock if isinstance(self._client, ZnunyClient) else nullcontext()
             context = self._client.timings.measure("UsableData") if isinstance(self._client, ZnunyClient) else nullcontext()
             with lock, context:
                 batch = self._fetch(period) if self._fetch else fetch_live(self._client, period, self._cancel, commit=False)
                 if self._cancel.is_set():
                     return self._error("cancelled", "Laden abgebrochen.")
+                batch.queues = self._client.queues
                 self._publish_batch(batch)
             with self._state_lock:
-                self._settings.set({"agent_registry": identities(self._cache, self._settings, apply_overrides=False), "web_period_preset": selection.get("preset")})
+                known = set(self._settings.get("known_queues", []))
+                for frame in batch.frames.values():
+                    known.update(str(item) for item in frame["Queue"].dropna().unique())
+                self._settings.set({"known_queues": sorted(known), "agent_registry": identities(self._cache, self._settings, apply_overrides=False), "web_period_preset": selection.get("preset")})
                 self._changes = False
                 self._busy = False
                 self._last_successful_connection = datetime.now(timezone.utc).isoformat()
@@ -378,6 +394,8 @@ class DesktopBridge:
         except Exception:
             return self._error("data", "Die Daten konnten nicht vollständig geladen werden. Der letzte Datenstand bleibt verfügbar.")
         finally:
+            if self._cache.batch is not None:
+                self._client.queues = self._cache.batch.queues
             self._busy = False
             self._network.release()
 

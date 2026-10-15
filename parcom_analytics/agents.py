@@ -66,14 +66,14 @@ def resolved_identity(item, override=None):
 
 
 def discover(batch, registry=None):
-    """Keep only humans observed in PBX/PBX Intern, using mappings just for names."""
+    """Keep humans observed in the selected queues, using mappings just for names."""
     from .znuny import DEFAULT_QUEUES
     registry = registry or {}
     observed = {key for key, item in registry.items() if item.get("pbxObserved") and key != "1"}
     logins = {}
     if batch:
         for frame in (*batch.frames.values(), *batch.previous.values()):
-            scoped = frame.loc[frame["Queue"].isin(DEFAULT_QUEUES)]
+            scoped = frame.loc[frame["Queue"].isin(batch.queues)] if batch.queues is not None else frame
             for row in scoped.reindex(columns=["OwnerID", "OwnerLogin", "ClosedByID", "ResponseByID"]).drop_duplicates().to_dict("records"):
                 for column in ("OwnerID", "ClosedByID", "ResponseByID"):
                     key = identifier(row.get(column))
@@ -82,7 +82,7 @@ def discover(batch, registry=None):
                         if column == "OwnerID" and isinstance(row.get("OwnerLogin"), str) and row["OwnerLogin"]:
                             logins[key] = row["OwnerLogin"]
         for row in batch.agents:
-            if row.get("Queue") not in (*DEFAULT_QUEUES, None):
+            if batch.queues is not None and row.get("Queue") not in (*batch.queues, None):
                 continue
             for column in ("ClosedByID", "ResponseByID"):
                 key = identifier(row.get(column))
@@ -148,10 +148,12 @@ def metrics(batch, selected):
     import pandas as pd
     from .znuny import DEFAULT_QUEUES
     from .comparisons import comparison, snapshot_context
-    opened = batch.frames[3].loc[batch.frames[3]["Queue"].isin(DEFAULT_QUEUES)].drop_duplicates("TicketID")
+    opened = batch.frames[3].drop_duplicates("TicketID")
+    if batch.queues is not None:
+        opened = opened.loc[opened["Queue"].isin(batch.queues)]
     activity = pd.DataFrame(batch.agents)
-    if not activity.empty and "Queue" in activity:
-        activity = activity.loc[activity["Queue"].isin(DEFAULT_QUEUES) | activity["Queue"].isna()]
+    if not activity.empty and "Queue" in activity and batch.queues is not None:
+        activity = activity.loc[activity["Queue"].isin(batch.queues) | activity["Queue"].isna()]
     rows = []
     for agent_id in selected:
         if agent_id == "1":

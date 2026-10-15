@@ -158,7 +158,7 @@ def analysis_dto(cache, kpi, ticket_type=None, page=0):
          item["delta"] if item["deltaAvailable"] else "Kein Vergleich verfügbar"]
         for name, item in semantic.items()], columns=["Kennzahl", "Vorher", "Ausgewählt", "Veränderung"])
     comparisons = table(comparison_data)
-    return json_value({"title": KPI_TITLES[kpi].split(" – ", 1)[-1], "description": KPI_DESCRIPTIONS[kpi],
+    return json_value({"title": KPI_TITLES[kpi].split(" – ", 1)[-1], "description": KPI_DESCRIPTIONS[kpi].replace("der PBX-Abteilung", "der ausgewählten Queues").replace("PBX-Tickets", "Tickets der ausgewählten Queues"),
                        "metrics": cards, "primaryStatistic": "median" if kpi in {5, 6} else None,
                        "comparisons": semantic, **bounds(cache.batch.period),
                        "chart": chart(result), "history": {"title": "Entwicklung", "kind": "line", "labels": labels, "datasets": histories, "unitLabel": {"minutes": "Minuten", "percent": "%", "count": "Tickets"}[next(iter(history_metrics(result).values()))[1]]},
@@ -201,7 +201,8 @@ def agents_dto(cache, settings, agent_id=None, page=0):
     activity = pd.DataFrame(batch.agents)
     if not activity.empty and "Queue" in activity:
         from ..znuny import DEFAULT_QUEUES
-        activity = activity.loc[activity["Queue"].isin(DEFAULT_QUEUES) | activity["Queue"].isna()]
+        if cache.batch.queues is not None:
+            activity = activity.loc[activity["Queue"].isin(cache.batch.queues) | activity["Queue"].isna()]
     current = activity.loc[activity["period"].eq("current")] if not activity.empty else activity
     response = current.loc[current["ResponseByID"].isin(chosen)] if not current.empty else current
     if not response.empty:
@@ -284,7 +285,11 @@ def overview(cache, settings):
     action = action[[column for column in ("Ticket#", "Titel", "Besitzer", "Timer", "Sperre") if column in action]]
     selected_score = cache.selected_performance()
     top[0] = compared_metric("Performance Score", "–", selected_score, "percent")
-    top[0]["note"] = "Ausgewählter Zeitraum · unveränderte Score-Formel"
+    top[0]["note"] = "Ausgewählter Zeitraum · Trendbewertung"
+    if selected_score["value"] is not None:
+        value = selected_score["value"]
+        top[0]["tone"] = "score-green" if value >= 90 else "score-yellow" if value >= 75 else "score-orange" if value >= 60 else "score-red"
+        top[0]["contextLabel"] = score_status(value)[0] + f" · {len(selected_score['areas'])}/5 Bereiche"
     breakdown = [{"label": item["label"],
                   "before": history_value(item["before"] * (100 if item["unit"] == "share" else 1), "percent" if item["unit"] == "share" else item["unit"]),
                   "after": history_value(item["after"] * (100 if item["unit"] == "share" else 1), "percent" if item["unit"] == "share" else item["unit"]),

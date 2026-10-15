@@ -76,6 +76,7 @@ class LiveBatch:
     # Memory-only staging. Never serialize raw REST responses or history.
     _state: object = field(default=None, repr=False, compare=False)
     snapshot_is_now: bool | None = None
+    queues: tuple[str, ...] | None = DEFAULT_QUEUES
 
 
 @dataclass
@@ -169,7 +170,7 @@ def _fetch_live(client, period, cancel, progress):
         if cancel.is_set():
             raise ZnunyError("Laden abgebrochen.")
         for ticket in client.get_tickets(all_ids[start:start+50]):
-            if ticket.get("Queue") not in DEFAULT_QUEUES:
+            if vars(client).get("queues", DEFAULT_QUEUES) is not None and ticket.get("Queue") not in vars(client).get("queues", DEFAULT_QUEUES):
                 raise ZnunyError("Die Daten haben sich während des Ladens geändert. Bitte erneut aktualisieren.")
             tickets[str(ticket["TicketID"])] = ticket
         progress(round(min(start+50, len(all_ids)) / max(1, len(all_ids)) * 100))
@@ -199,12 +200,12 @@ def fetch_period(client, period, cancel, progress):
     previous_start, previous_end = period.previous
     selections = {
         "new": search(dated("Create", period.start, period.end, include_end=True)),
-        "closed": search({**dated("Close", period.start, period.end, include_end=True), "StateType": "closed"}),
+        "closed": search(dated("Close", period.start, period.end, include_end=True)),
         "open": search({"StateType": list(OPEN_TYPES)}),
         "waiting": search({"StateType": "pending reminder"}),
         "escalated": search({"StateType": list(OPEN_TYPES), "TicketEscalationTimeOlderMinutes": 1}),
         "previous_new": search(dated("Create", previous_start, previous_end)),
-        "previous_closed": search({**dated("Close", previous_start, previous_end), "StateType": "closed"}),
+        "previous_closed": search(dated("Close", previous_start, previous_end)),
     }
     ids = list(dict.fromkeys(value for values in selections.values() for value in values))
     old = client._live_state if isinstance(client, ZnunyClient) else None
@@ -220,7 +221,7 @@ def fetch_period(client, period, cancel, progress):
         if cancel.is_set():
             raise ZnunyError("Laden abgebrochen.")
         for ticket in client.get_tickets(needed[offset:offset+50], cancel=cancel):
-            if ticket.get("Queue") not in DEFAULT_QUEUES:
+            if vars(client).get("queues", DEFAULT_QUEUES) is not None and ticket.get("Queue") not in vars(client).get("queues", DEFAULT_QUEUES):
                 raise ZnunyError("Die Daten haben sich während des Ladens geändert. Bitte erneut aktualisieren.")
             # Cache only the fields the application consumes, never articles/auth.
             safe = {key: deepcopy(value) for key, value in ticket.items()
@@ -251,8 +252,6 @@ def fetch_period(client, period, cancel, progress):
             ticket = tickets[ticket_id]
             # The state type, never a substring of a localized state name, controls classification.
             state_type = str(ticket.get("StateType") or "").lower()
-            if key.endswith("closed") and state_type and state_type != "closed":
-                continue
             if key == "waiting" and state_type and state_type != "pending reminder":
                 continue
             if key == "open" and state_type and state_type not in OPEN_TYPES:
@@ -273,7 +272,7 @@ def fetch_period(client, period, cancel, progress):
     return LiveBatch(period, datetime.now(ZURICH).isoformat(timespec="seconds"),
                      {1:new, 2:closed, 3:opened, 4:opened.copy(), 5:closed.copy(), 6:closed.copy(), 7:waiting},
                      {1:old_new, 2:old_closed, 5:old_closed.copy(), 6:old_closed.copy()},
-                     load_started_at=started_at, history_loaded=False,
+                     load_started_at=started_at, history_loaded=False, queues=vars(client).get("queues", DEFAULT_QUEUES),
                      snapshot_is_now=abs((datetime.fromisoformat(started_at).astimezone(timezone.utc) - period.end.astimezone(timezone.utc)).total_seconds()) <= 2,
                      _state=TicketState(raw_tickets, selections, started_at,
                                         generation, period))
@@ -381,7 +380,7 @@ def load_history(client, batch, cancel, progress=lambda value: None):
     missing = [value for value in ids if value not in tickets]
     for offset in range(0, len(missing), 50):
         for ticket in client.get_tickets(missing[offset:offset+50], cancel=cancel):
-            if ticket.get("Queue") not in DEFAULT_QUEUES:
+            if vars(client).get("queues", DEFAULT_QUEUES) is not None and ticket.get("Queue") not in vars(client).get("queues", DEFAULT_QUEUES):
                 raise ZnunyError("Die Daten haben sich während des Ladens geändert. Bitte erneut aktualisieren.")
             safe = {key: deepcopy(value) for key, value in ticket.items()
                     if key in {*FIELD_MAP, "Age", "CustomerID"}}

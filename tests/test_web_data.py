@@ -20,12 +20,13 @@ def web_data(tmp_path):
     return cache, settings
 
 
-def test_overview_uses_existing_management_values_and_keeps_score_unavailable(web_data):
+def test_overview_uses_existing_management_values_and_discloses_partial_score(web_data):
     cache, settings = web_data
     dto = overview(cache, settings)
     assert dto["metrics"][1]["value"] == cache.management().metrics["Neue Tickets"]
     assert dto["metrics"][3]["value"] == cache.management().metrics["Abschlussverhältnis (geschlossen / neu)"]
-    assert dto["metrics"][0]["value"] == "–"
+    assert dto["metrics"][0]["numericValue"] == 100
+    assert "2 von 5" in dto["score"]["issue"]
     assert dto["score"]["issue"]
     assert "SessionID" not in json.dumps(dto, allow_nan=False)
     assert dto["action"]["total"] == 6

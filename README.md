@@ -17,7 +17,7 @@
 
 *Integriertes Produktionsfrontend mit anonymen, synthetischen Beispieldaten. Keine echten Kunden- oder Anmeldedaten. Fehlende vergleichbare Datenstände werden bewusst als «–» dargestellt.*
 
-**Version 1.0.0 · Integrationsstand, noch keine Produktionsfreigabe.** EXE und Installer wurden auf dem Entwicklungsrechner geprüft. Die echte Znuny-Anmeldung und Live-Datenfunktion wurden vom Benutzer bestätigt; die native Sichtprüfung ist bestanden. Der Benutzer hat am 14.10.2026 die PDF-Exporte bestätigt. Die neuen Kalenderanpassungen und die noch offene Überarbeitung des Performance Scores sind noch nicht als Installer veröffentlicht; finale Release-Prüfungen stehen aus. Eine frische Windows-Installation und physische DPI-Wechsel wurden nicht geprüft. Daher sind Main-Merge, Tag und GitHub Release nicht freigegeben. Details: [VALIDATION.md](VALIDATION.md) und [INTEGRATION.md](INTEGRATION.md).
+**Version 1.0.0 · Integrationsstand, noch keine Produktionsfreigabe.** EXE und Installer wurden auf dem Entwicklungsrechner geprüft. Die echte Znuny-Anmeldung und Live-Datenfunktion wurden vom Benutzer bestätigt; die native Sichtprüfung ist bestanden. Der Benutzer hat am 14.10.2026 die PDF-Exporte bestätigt. Die neuen Kalender-, Queue- und Score-Anpassungen sind noch nicht als Installer veröffentlicht; finale Release-Prüfungen stehen aus. Eine frische Windows-Installation und physische DPI-Wechsel wurden nicht geprüft. Daher sind Main-Merge, Tag und GitHub Release nicht freigegeben. Details: [VALIDATION.md](VALIDATION.md) und [INTEGRATION.md](INTEGRATION.md).
 
 ## Inhaltsverzeichnis
 
@@ -39,7 +39,7 @@
 
 ## Überblick
 
-ParCom Znuny Analytics liest Tickets aus **PBX** und **PBX Intern** über die Znuny-REST-Schnittstelle. Die lokale Windows-Anwendung verbindet ein React-Dashboard mit einem Python-Auswertungsbackend. Der Server wird nur lesend angesprochen; Tickets werden nicht verändert. Die normale Oberfläche verwendet Live-Daten und den letzten lokalen Cache, keinen Excel-Upload.
+ParCom Znuny Analytics liest Tickets über die Znuny-REST-Schnittstelle. Die Queue-Auswahl startet mit **PBX und PBX Intern**. **Alle berechtigten Queues** lädt den für die Anmeldung verfügbaren Umfang; danach können die in den Daten erkannten Queues einzeln ausgewählt werden. Die Auswahl gilt für Übersicht, Analysen, Agenten und PDF-Exporte. Beim Wechsel wird die bisherige aggregierte Vergleichshistorie zurückgesetzt, damit unterschiedliche Umfänge nicht vermischt werden. Der letzte gewählte Umfang bleibt im lokalen Datenstand erkennbar. Die lokale Windows-Anwendung verbindet ein React-Dashboard mit einem Python-Auswertungsbackend. Der Server wird nur lesend angesprochen; Tickets werden nicht verändert. Die normale Oberfläche verwendet Live-Daten und den letzten lokalen Cache, keinen Excel-Upload.
 
 ## Funktionen
 
@@ -160,7 +160,7 @@ Die Timeline bietet **1T / 1W / 1M / 3M / 6M / 1J**, zwei verschiebbare Grenzen 
 
 ![Kalenderauswahl](docs/screenshots/calendar.png)
 
-Die Auswertung bleibt auf PBX und PBX Intern begrenzt. Znunys Standard-Wochenstatistik hat keinen fest eingebauten PBX-Filter; unterschiedliche Queue- oder Berechtigungsumfänge können deshalb unterschiedliche Zahlen ergeben. Eine zahlenmässige Übereinstimmung mit der konkreten Znuny-Installation wurde noch nicht bestätigt.
+Die Auswertung verwendet die gewählte Queue-Auswahl. Znunys Standard-Wochenstatistik hat keinen fest eingebauten PBX-Filter; unterschiedliche Queue- oder Berechtigungsumfänge können deshalb unterschiedliche Zahlen ergeben. Eine zahlenmässige Übereinstimmung mit der konkreten Znuny-Installation wurde noch nicht bestätigt.
 
 Neue und geschlossene Tickets sowie Servicezeiten beziehen sich auf den gewählten Zeitraum; der Vergleich ist gleich lang und unmittelbar vorgelagert. Gemeinsame Zeitraumgrenzen werden nicht doppelt gezählt. Bestandskennzahlen sind als «Stand jetzt» oder historisch als «Stand am …» gekennzeichnet. Historische Werte und Bestandsdeltas erscheinen nur mit exakt erhobenen passenden Snapshots; heutige Tickets ersetzen keinen historischen Bestand. Reaktions- und Lösungszeit zeigen primär den Median, den Durchschnitt ergänzend.
 
@@ -168,7 +168,7 @@ Alle zwei Minuten prüft eine kleine Suche auf Änderungen. **Neuer Datenstand v
 
 ### Fachliche Einordnung
 
-Live-Eskalationen stammen aus der aktuellen serverseitigen Eskalationssuche. Wartende Tickets sind `pending reminder`; automatisch zu schliessende Tickets werden separat ausgewiesen. Aktive, fehlende und überfällige Timer werden unterschieden. Kundennummer `00325` erscheint als **Kein Kunde zugewiesen**. Historische Tickets mit Typ `Unclassified` bleiben enthalten.
+Geschlossene Tickets werden anhand des Schliesszeitpunkts im Zeitraum gezählt; ein inzwischen wieder geöffnetes Ticket wird deshalb nicht allein wegen seines heutigen Status entfernt. Live-Eskalationen stammen aus der aktuellen serverseitigen Eskalationssuche. Wartende Tickets sind `pending reminder`; automatisch zu schliessende Tickets werden separat ausgewiesen. Aktive, fehlende und überfällige Timer werden unterschieden. Kundennummer `00325` erscheint als **Kein Kunde zugewiesen**. Historische Tickets mit Typ `Unclassified` bleiben enthalten.
 
 Agentenabschlüsse stammen aus der Ticket-Historie; aktueller Besitzer und `ChangeBy` ersetzen diese Zuordnung nicht. Erstantworten verwenden passende Historienereignisse. Nicht eindeutig zuordenbare Aktivitäten bleiben unbekannt, SYSTEM erhält keine menschlichen Abschlüsse. Die Teamwahl ist persistent; eine Abwahl löscht keine Historie.
 
@@ -176,9 +176,11 @@ Agentenabschlüsse stammen aus der Ticket-Historie; aktueller Besitzer und `Chan
 
 Der Score ist ein **Trendindex, keine SLA-Erfüllung**. 100 % bedeutet keine Verschlechterung gegenüber dem vorherigen gleich langen Vergleichszeitraum; auch unverändert hoher Backlog kann 100 % ergeben. Neue und geschlossene Tickets dienen als Kontext ohne Score-Gewicht.
 
-Fünf Bereiche zählen je 20 %: Backlog, Erstantwort-Eskalationsquote, mediane Reaktionszeit, mediane Lösungszeit und wartende Tickets. Backlog und wartende Tickets berücksichtigen Anzahl und Anteil über 30 Tage. Pro Teilkennzahl gilt: aktuell ≤ vorher ergibt 100 %, sonst `100 × vorher / aktuell`. Von 0 auf 0 ergibt 100 %, von 0 auf einen positiven Wert 0 %. Verbesserungen sind bei 100 % gedeckelt. Diese Erstantwort-Eskalationsformel ist von der allgemeinen Live-Eskalationsanalyse zu unterscheiden.
+Bei vollständiger Datenbasis zählen fünf Bereiche je 20 %: Backlog, Eskalationsquote, mediane Reaktionszeit, mediane Lösungszeit und wartende Tickets. Backlog und wartende Tickets berücksichtigen Anzahl und Anteil über 30 Tage. Pro Teilkennzahl gilt: aktuell ≤ vorher ergibt 100 %, sonst `max(1, 100 × vorher / aktuell)`. Von 0 auf 0 ergibt 100 %, von 0 auf einen positiven Wert 1 %. Verbesserungen sind bei 100 % gedeckelt. Bei einer Teilbewertung wird das Gewicht gleichmässig auf die tatsächlich berücksichtigten Bereiche verteilt.
 
-Erforderlich sind alle sieben Kennzahlen für den ausgewählten und den unmittelbar vorherigen gleich langen Zeitraum sowie die passenden tatsächlich erhobenen Bestands-Snapshots. Auch eine Wochenansicht kann bei vollständiger Vergleichsbasis bewertet werden. Für einen Vergleich mit dem vorherigen Score wird zusätzlich dessen Vergleichsbasis benötigt. Bei fehlender Historie oder unbestimmten Eingangswerten erscheint kein Score. Die aufklappbare Erklärung zeigt Berechnung, Teilbereiche und Datenbasis.
+Der Score vergleicht den ausgewählten Zeitraum mit dem unmittelbar vorhergehenden gleich langen Zeitraum. Standardmässig sind heute und die sechs vorherigen Kalendertage ausgewählt. Bereits beim ersten Live-Abruf können die Mediane der Reaktions- und Lösungszeit beider Zeiträume bewertet werden; vorher gespeicherte lokale Snapshots sind dafür nicht nötig. Nur Bereiche mit gültigen Vergleichswerten werden einbezogen und gleich gewichtet. Die Anzeige nennt beispielsweise **2/5 Bereiche** und zeigt ausgeschlossene Bereiche sowie die Vorher-/Nachher-Werte. Fehlende oder leere Zeitmessungen ergeben keinen erfundenen Score; Nullminuten bleiben gültige Messwerte.
+
+Bei vollständiger Vergleichsbasis können zusätzlich die bestehenden Bestandsbereiche berücksichtigt werden. Historische Bestände, Eskalationen und wartende Tickets werden niemals aus dem heutigen Bestand geschätzt. Der Live-Trendindex liegt zwischen 1 und 100; 100 bedeutet keine Verschlechterung gegenüber dem Vergleich, **keine absolute SLA-Erfüllung**. Für Scores mit unterschiedlicher Bereichsabdeckung wird kein Veränderungspfeil ausgegeben. Neue und geschlossene Ticketzahlen bleiben Kontext und werden nicht isoliert als Teamqualität bewertet.
 
 ### PDF-Berichte
 
@@ -282,7 +284,7 @@ docs/screenshots/        Sichere Aufnahmen der integrierten Oberfläche
 - Echte Anmeldung und Live-Datenfunktion sind durch den Benutzer bestätigt. Die dokumentierten Performance-Messungen verwenden synthetische Daten und sind keine neuen Live-Messungen.
 - Installation wurde auf dem Entwicklungsrechner unter separater Testkennung geprüft; frische Windows-Installation und All-Users-Abnahme stehen aus. Die fehlende WebView2-Laufzeit wurde simuliert, nicht vom Rechner entfernt.
 - Browser-Skalierung ersetzt keinen physischen Windows-DPI-Wechsel.
-- Ohne vollständige vergleichbare Zeiträume und passende Bestands-Snapshots gibt es keinen Performance Score. Historische Bestände können nicht nachträglich aus heutigen Tickets rekonstruiert werden.
+- Ohne gültige Zeitmessungen in beiden Vergleichszeiträumen und ohne vollständige Bestandsbasis bleibt der Score nicht berechenbar. Teilbewertungen weisen ihre begrenzte Abdeckung aus. Historische Bestände werden nicht aus heutigen Tickets geschätzt.
 - EXE und Installer sind unsigned; es gibt noch keinen finalen Release und keinen freigegebenen Main-Merge.
 
 ## Drittkomponenten und Lizenz
